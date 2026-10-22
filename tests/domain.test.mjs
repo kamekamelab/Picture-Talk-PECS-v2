@@ -66,3 +66,13 @@ test('バックアップから復元できない総量になる前に保存を�
   state.profile.cardId = 'c0';
   assert.throws(() => validateState(state), /24MB/);
 });
+test('音声設定がない旧データを読み込め、選んだ声と速さをバックアップに残せる', () => {
+  const state = initialState();
+  delete state.settings.speech;
+  const migrated = validateState(state);
+  assert.deepEqual(migrated.settings.speech, { voiceURI: '', rate: 1 });
+  migrated.settings.speech = { voiceURI: 'ja-local-voice', rate: .85 };
+  assert.deepEqual(parseBackup(backupText(migrated)).settings.speech, migrated.settings.speech);
+  migrated.settings.speech.rate = 100;
+  assert.throws(() => validateState(migrated), /読み上げ/);
+});

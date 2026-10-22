@@ -14,7 +14,7 @@ export function initialState() {
       { id: 'music', label: 'おんがく', category: 'かつどう', emoji: '🎵', image: null }
     ],
     records: [],
-    settings: { showLabel: true, pin: null },
+    settings: { showLabel: true, pin: null, speech: { voiceURI: '', rate: 1 } },
     lastBackupAt: null
   };
 }
@@ -59,11 +59,14 @@ export function validateState(input) {
   if (!input.settings || typeof input.settings.showLabel !== 'boolean') throw new Error('設定が正しくありません。');
   const pin = input.settings.pin;
   if (pin !== null && (!pin || !/^[a-f0-9]{32}$/.test(pin.salt) || !/^[a-f0-9]{64}$/.test(pin.hash))) throw new Error('PIN設定が正しくありません。');
+  const speech = input.settings.speech === undefined ? { voiceURI: '', rate: 1 } : input.settings.speech;
+  if (!speech || ![.85, 1, 1.1].includes(speech.rate)) throw new Error('読み上げ設定が正しくありません。');
+  const speechSettings = { voiceURI: string(speech.voiceURI, 500, '読み上げ音声', true), rate: speech.rate };
   const clean = {
     schemaVersion: SCHEMA,
     profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId, phase },
     cards, records,
-    settings: { showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null },
+    settings: { showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null, speech: speechSettings },
     lastBackupAt: input.lastBackupAt === null ? null : date(input.lastBackupAt)
   };
   // 常に復元可能なサイズで書き出せるよう、封筒分の余裕を残す。

@@ -1,7 +1,7 @@
 import { newTrial, transition, backupText, parseBackup, csv, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
 import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
-import { createReader, localJapaneseVoice } from './speech.js';
+import { createReader, localJapaneseVoice, localJapaneseVoices } from './speech.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -43,11 +43,20 @@ function voiceStatus() {
 window.speechSynthesis?.addEventListener('voiceschanged', () => {
   const status = document.querySelector('#voice-status');
   if (status) status.textContent = voiceStatus();
+  const select = document.querySelector('#voice-select');
+  if (select) { const selected = select.value; select.innerHTML = voiceOptions(selected); }
 });
 // 音声一覧の準備のみ。利用者が「よむ」を押すまでは読み上げない。
 window.speechSynthesis?.getVoices();
 document.addEventListener('visibilitychange', () => { if (document.hidden) reader.stop(); });
 window.addEventListener('pagehide', () => reader.stop());
+function voiceOptions(selected = state.settings.speech.voiceURI) {
+  const voices = localJapaneseVoices(window.speechSynthesis?.getVoices() || []);
+  return '<option value="">端末の標準音声</option>' + voices.map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === selected ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
+}
+function speechSettingsForm() {
+  return `<form id="speech-form"><label>声の種類<select id="voice-select" name="voiceURI">${voiceOptions()}</select></label><label>話す速さ<select name="rate">${[[.85, 'ゆっくり'], [1, 'ふつう（おすすめ）'], [1.1, '少し速く']].map(([value, text]) => `<option value="${value}" ${state.settings.speech.rate === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label><div class="speech-setting-actions"><button type="button" class="secondary" data-action="preview-speech">ためしにきく</button><button type="button" class="quiet" data-action="stop-speech">とめる</button><button type="submit" class="primary">声の設定を保存</button></div><p class="hint">「ボールください」と読みます。カード間に区切りを入れず一文として読み上げます。選べる声や抑揚は端末によって異なります。</p></form>`;
+}
 
 function toast(text) {
   notice.textContent = text;
@@ -76,7 +85,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.3.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.3.1 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
@@ -98,7 +107,7 @@ function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
 }
 function settingsView() {
-  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。自動再生・効果音・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p><p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
+  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。自動再生・効果音・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
 function sentenceStrip(editable = false) {
   const items = trial.cardIds.map((id, index) => {
@@ -240,10 +249,16 @@ document.addEventListener('click', event => {
     if (reader.reading) { reader.stop(); return; }
     try {
       if (state.profile.phase !== 4 || !['selected', 'partner'].includes(trial.stage)) throw new Error('ぶんを つくってから よもう。');
-      reader.read(sentenceWords(trial, state.cards));
+      reader.read(sentenceWords(trial, state.cards), state.settings.speech);
     } catch (error) { toast(error.message); }
     return;
   }
+  if (action === 'preview-speech') {
+    const fields = new FormData(document.querySelector('#speech-form'));
+    try { reader.read(['ボール', 'ください'], { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')) }); } catch (error) { toast(error.message); }
+    return;
+  }
+  if (action === 'stop-speech') return;
   if (action === 'close-dialog') return closeDialog();
   if (action === 'teacher') return teacherGate();
   if (action === 'home') { screen = 'home'; render(); return; }
@@ -308,6 +323,9 @@ document.addEventListener('submit', event => {
       const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);
       await persist(next); closeDialog(); render(); toast('カードを保存しました。');
+    } else if (form.id === 'speech-form') {
+      next.settings.speech = { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')) };
+      reader.stop(); await persist(next); render(); toast('声の設定を保存しました。');
     } else if (form.id === 'display-form') {
       next.settings.showLabel = fields.has('showLabel'); await persist(next); render(); toast('表示設定を保存しました。');
     } else if (form.id === 'pin-form') {

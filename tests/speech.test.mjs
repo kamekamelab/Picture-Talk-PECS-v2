@@ -18,7 +18,7 @@ test('既定がクラウド音声でも、端末内の日本語音声を明示�
   assert.equal(s.spoken.length, 1);
   assert.equal(s.spoken[0].voice, local);
   assert.equal(s.spoken[0].lang, 'ja-JP');
-  assert.equal(s.spoken[0].text, 'ボール、ください。');
+  assert.equal(s.spoken[0].text, 'ボールください。');
   assert.equal(s.reader.reading, true);
   s.spoken[0].onend();
   assert.equal(s.reader.reading, false);
@@ -47,7 +47,9 @@ test('文の取消や連打で音声が重ならず、古い終了イベント�
   assert.equal(s.errors.length, 0);
 });
 test('並べた順を維持し、空の文は再生しない', () => {
-  assert.equal(speechText(['あかい', 'ボール', 'ください']), 'あかい、ボール、ください。');
+  assert.equal(speechText(['あかい', 'ボール', 'ください']), 'あかいボールください。');
+  assert.equal(speechText(['まって', 'ください']), 'まってください。');
+  assert.equal(speechText(['ボール', 'を', 'ください']), 'ボールをください。');
   assert.throws(() => speechText([]));
   assert.throws(() => speechText(['']));
   const s = setup();
@@ -61,4 +63,20 @@ test('非対応ブラウザーと再生エラーを扱える', () => {
   s.spoken[0].onerror({ error: 'audio-busy' });
   assert.equal(s.reader.reading, false);
   assert.equal(s.errors.length, 1);
+});
+test('声を比較でき、選択された端末内音声と速度が再生に反映される', () => {
+  const another = { ...local, name: '別の声', voiceURI: 'second' };
+  const s = setup([remote, local, another]);
+  s.reader.read(['ボール', 'ください'], { voiceURI: 'second', rate: 1.1 });
+  assert.equal(s.spoken[0].voice, another);
+  assert.equal(s.spoken[0].rate, 1.1);
+  assert.equal(s.spoken[0].pitch, 1);
+  s.reader.read(['ボール', 'ください']);
+  assert.equal(s.spoken[1].rate, 1);
+  assert.throws(() => s.reader.read(['ボール'], { rate: NaN }), /速さ/);
+});
+test('保存された声が別の端末になくてもクラウド音声を選ばない', () => {
+  const s = setup([{ ...remote, voiceURI: 'remote' }, local]);
+  s.reader.read(['ボール', 'ください'], { voiceURI: 'remote' });
+  assert.equal(s.spoken[0].voice, local);
 });
