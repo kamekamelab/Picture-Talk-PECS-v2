@@ -80,7 +80,7 @@ function sentenceStrip(editable = false) {
     return `<div class="sentence-unit"><div class="word-card" role="img" aria-label="${esc(card.label)}">${image(card)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div>${editable ? `<div class="word-controls"><button class="quiet" data-sentence-action="left" data-card-id="${id}" aria-label="${esc(card.label)}を左へ" ${index === 0 ? 'disabled' : ''}>←</button><button class="quiet" data-sentence-action="remove" data-card-id="${id}" aria-label="${esc(card.label)}を外す">×</button><button class="quiet" data-sentence-action="right" data-card-id="${id}" aria-label="${esc(card.label)}を右へ" ${index === trial.cardIds.length - 1 ? 'disabled' : ''}>→</button></div>` : ''}</div>`;
   }).join('');
   const ending = trial.ending ? `<div class="sentence-unit ending"><div class="word-card"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></div>${editable ? '<button class="quiet" data-sentence-action="ending" aria-label="くださいを外す">×</button>' : ''}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
-  return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div>`;
+  return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
 }
 function sentenceView() {
   if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>ぶんを わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
