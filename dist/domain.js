@@ -1,12 +1,12 @@
 export const FORMAT = 'picture-talk-pecs-v2';
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 const safeImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const idPattern = /^[a-zA-Z0-9_-]{1,80}$/;
 export function initialState() {
   return {
     schemaVersion: SCHEMA,
-    profile: { alias: 'がくしゅうしゃ', cardId: 'juice' },
+    profile: { alias: 'がくしゅうしゃ', cardId: 'juice', phase: 1 },
     cards: [
       { id: 'juice', label: 'ジュース', category: 'のみもの', emoji: '🧃', image: null },
       { id: 'ball', label: 'ボール', category: 'あそび', emoji: '⚽', image: null },
@@ -31,7 +31,7 @@ function date(value) {
   return value;
 }
 export function validateState(input) {
-  if (!input || input.schemaVersion !== SCHEMA) throw new Error('対応していないデータ形式です。');
+  if (!input || ![1, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
   if (!Array.isArray(input.cards) || input.cards.length < 1 || input.cards.length > 500) throw new Error('カードは1〜500枚にしてください。');
   const ids = new Set();
   const cards = input.cards.map(c => {
@@ -41,19 +41,27 @@ export function validateState(input) {
     return { id: c.id, label: string(c.label, 40, 'カードの文字'), category: string(c.category, 30, 'カテゴリ'), emoji: string(c.emoji, 16, 'マーク', true), image: c.image };
   });
   if (!input.profile || !ids.has(input.profile.cardId)) throw new Error('学習用カードが見つかりません。');
+  const phase = input.schemaVersion === 1 ? 1 : input.profile.phase;
+  if (![1, 4].includes(phase)) throw new Error('対応していない学習段階です。');
   if (!Array.isArray(input.records) || input.records.length > 100000) throw new Error('記録の形式が正しくありません。');
   const recordIds = new Set();
   const records = input.records.map(r => {
-    if (!r || recordIds.has(id(r.id)) || r.phase !== 1 || !['independent', 'assisted', 'unrated'].includes(r.support)) throw new Error('学習記録の形式が正しくありません。');
+    if (!r || recordIds.has(id(r.id)) || ![1, 4].includes(r.phase) || !['independent', 'assisted', 'unrated'].includes(r.support)) throw new Error('学習記録の形式が正しくありません。');
     recordIds.add(r.id);
-    return { id: r.id, phase: 1, at: date(r.at), cardId: id(r.cardId), label: string(r.label, 40, '記録のカード名'), alias: string(r.alias, 40, '記録の呼び名'), support: r.support };
+    const record = { id: r.id, phase: r.phase, at: date(r.at), cardId: id(r.cardId), label: string(r.label, r.phase === 4 ? 180 : 40, '記録のカード名・文'), alias: string(r.alias, 40, '記録の呼び名'), support: r.support };
+    if (r.phase === 4) {
+      if (!Array.isArray(r.sentence) || r.sentence.length < 2 || r.sentence.length > 5 || r.sentence.at(-1) !== 'ください' || r.sentence.slice(0, -1).some(word => word === 'ください')) throw new Error('「ください」は文の最後に置いてください。');
+      record.sentence = r.sentence.map(word => string(word, 40, '文のことば'));
+      if (record.label !== record.sentence.join(' ')) throw new Error('記録の文とカードの順序が一致しません。');
+    }
+    return record;
   });
   if (!input.settings || typeof input.settings.showLabel !== 'boolean') throw new Error('設定が正しくありません。');
   const pin = input.settings.pin;
   if (pin !== null && (!pin || !/^[a-f0-9]{32}$/.test(pin.salt) || !/^[a-f0-9]{64}$/.test(pin.hash))) throw new Error('PIN設定が正しくありません。');
   const clean = {
     schemaVersion: SCHEMA,
-    profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId },
+    profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId, phase },
     cards, records,
     settings: { showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null },
     lastBackupAt: input.lastBackupAt === null ? null : date(input.lastBackupAt)

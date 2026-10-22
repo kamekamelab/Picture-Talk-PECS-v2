@@ -1,5 +1,6 @@
 import { newTrial, transition, backupText, parseBackup, csv, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
+import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -49,14 +50,14 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 初期版 0.1.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.2.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
-  return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">使うカードを1枚選んで、交換の学習をはじめましょう。</p></div><span class="phase-chip">Phase 1</span></section>
-  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">1枚を交換する</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><p class="hint">相手がカードを受け取り、欲しい物や活動につなげます。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
+  return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、交換の学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
+  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚を交換する</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><p class="hint">相手がカードを受け取り、欲しい物や活動につなげます。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
   <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${image(card, true)}<strong>${esc(card.label)}</strong></div><p class="muted">大きなカードで、ゆっくり交換。</p></section></div>
-  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚をわたすところから。</h2><p>現在はPhase 1を使えます。Phase 2〜4・文の帯は、次の開発で追加します。</p></div></section>`;
+  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚をわたすところから。</h2><p>Phase 1と、Phase 4の「ことば＋ください」を使えます。Phase 2・3は今後追加します。</p></div></section>`;
 }
 function cardsView() {
   return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${image(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
@@ -65,7 +66,7 @@ function recordsView() {
   const today = new Date().toLocaleDateString('ja-JP');
   const records = state.records.filter(r => new Date(r.at).toLocaleDateString('ja-JP') === today);
   const names = { independent: '自分から', assisted: '支援あり', unrated: '未評価' };
-  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>伝わったことを、残す。</h1><p class="muted">受け取りを確認した交換を、1回ずつ保存しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の交換',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード</th><th>Phase</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>1</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードを交換すると、ここに残ります。</p></div>'}</section>`;
+  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>伝わったことを、残す。</h1><p class="muted">受け取りを確認した交換を、1回ずつ保存しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の交換',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード</th><th>Phase</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>${r.phase}</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードを交換すると、ここに残ります。</p></div>'}</section>`;
 }
 function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
@@ -73,7 +74,21 @@ function backupView() {
 function settingsView() {
   return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">効果音・自動読み上げ・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
+function sentenceStrip(editable = false) {
+  const items = trial.cardIds.map((id, index) => {
+    const card = state.cards.find(c => c.id === id);
+    return `<div class="sentence-unit"><div class="word-card" role="img" aria-label="${esc(card.label)}">${image(card)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div>${editable ? `<div class="word-controls"><button class="quiet" data-sentence-action="left" data-card-id="${id}" aria-label="${esc(card.label)}を左へ" ${index === 0 ? 'disabled' : ''}>←</button><button class="quiet" data-sentence-action="remove" data-card-id="${id}" aria-label="${esc(card.label)}を外す">×</button><button class="quiet" data-sentence-action="right" data-card-id="${id}" aria-label="${esc(card.label)}を右へ" ${index === trial.cardIds.length - 1 ? 'disabled' : ''}>→</button></div>` : ''}</div>`;
+  }).join('');
+  const ending = trial.ending ? `<div class="sentence-unit ending"><div class="word-card"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></div>${editable ? '<button class="quiet" data-sentence-action="ending" aria-label="くださいを外す">×</button>' : ''}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
+  return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div>`;
+}
+function sentenceView() {
+  if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>ぶんを わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
+  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceStrip()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
+  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" aria-pressed="${trial.ending}"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceStrip(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button><button class="text-button" data-action="reset">ぜんぶ もどす</button></main>`;
+}
 function studentView() {
+  if (state.profile.phase === 4) return sentenceView();
   const card = state.cards.find(c => c.id === (trial.cardId || state.profile.cardId));
   if (trial.stage === 'partner') return `<main class="student partner"><p class="eyebrow">あいてに みせよう</p><h1>これを ください</h1><div class="student-card static-card" aria-label="${esc(card.label)}">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
   if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>あいてに わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
@@ -163,6 +178,10 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
   if (button.tagName === 'A') event.preventDefault();
+  if (button.dataset.sentenceAction) {
+    try { trial = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards); render(); } catch (error) { toast(error.message); }
+    return;
+  }
   if (button.dataset.recordId) {
     pendingRecord = state.records.find(r => r.id === button.dataset.recordId);
     if (pendingRecord) recordDialog();
@@ -191,14 +210,17 @@ document.addEventListener('click', event => {
   if (action === 'new-card') return cardEditor();
   if (action === 'select' || action === 'give' || action === 'reset') {
     if (pendingRecord) return recordDialog();
-    trial = transition(trial, action, state.profile.cardId); render(); return;
+    try { trial = state.profile.phase === 4 ? sentenceTransition(trial, action, null, state.cards) : transition(trial, action, state.profile.cardId); render(); } catch (error) { toast(error.message); } return;
   }
   if (action === 'remove-image') { if (imageBusy) return; draftImage = null; dialog.querySelector('#image-preview').innerHTML = '<span class="card-emoji">▧</span>'; return; }
   run(async () => {
     if (action === 'receive') {
-      const nextTrial = transition(trial, 'receive');
-      const card = state.cards.find(c=>c.id===trial.cardId);
-      const record = { id: uid(), phase: 1, at: now(), cardId: card.id, label: card.label, alias: state.profile.alias, support: 'unrated' };
+      const sentenceMode = state.profile.phase === 4;
+      const nextTrial = sentenceMode ? sentenceTransition(trial, 'receive', null, state.cards) : transition(trial, 'receive');
+      const card = state.cards.find(c=>c.id===(sentenceMode ? trial.cardIds.at(-1) : trial.cardId));
+      const sentence = sentenceMode ? sentenceWords(trial, state.cards) : null;
+      const record = { id: uid(), phase: state.profile.phase, at: now(), cardId: card.id, label: sentence ? sentence.join(' ') : card.label, alias: state.profile.alias, support: 'unrated' };
+      if (sentence) record.sentence = sentence;
       const next = structuredClone(state); next.records.push(record);
       await persist(next);
       trial = nextTrial; pendingRecord = record;
@@ -240,8 +262,8 @@ document.addEventListener('submit', event => {
   run(async () => {
     const next = structuredClone(state);
     if (form.id === 'learning-form') {
-      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId') };
-      await persist(next); unlocked = false; screen = 'student'; trial = newTrial(); render();
+      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')) };
+      await persist(next); unlocked = false; screen = 'student'; trial = state.profile.phase === 4 ? newSentenceTrial() : newTrial(); render();
     } else if (form.id === 'card-form') {
       const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);

@@ -51,7 +51,7 @@ test('リポジトリ配下のURLでも必要な全ファイルが揃い、通�
   await env.lifecycle('install'); await env.lifecycle('activate');
   const calls = env.networkCalls;
   env.offline();
-  for (const path of ['', 'index.html', 'app.js', 'domain.js', 'storage.js', 'style.css', 'icons/icon-192.png', 'icons/icon-512.png']) {
+  for (const path of ['', 'index.html', 'app.js', 'domain.js', 'sentence.js', 'storage.js', 'style.css', 'icons/icon-192.png', 'icons/icon-512.png']) {
     const response = await env.request(path, path === '' ? 'navigate' : 'cors');
     assert.ok(response?.body.length, path);
   }

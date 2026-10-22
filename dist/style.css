@@ -1,3 +1,46 @@
+.sentence-book {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 18px;
+  padding: 24px;
+  border: 2px solid #c9d9c1;
+  border-radius: 20px;
+  background: #eaf0e3;
+}
+.word-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  min-width: 0;
+  min-height: 150px;
+  border: 2px solid #849b76;
+  border-radius: 10px;
+  background: #fffefb;
+  color: #273e36;
+}
+.word-card .card-image { height: 90px; }
+.word-card strong { font-size: 20px; overflow-wrap: anywhere; max-width: 100%; }
+.sentence-book .word-card:disabled { opacity: .45; }
+.request-choice { border-color: #a36c28; background: #fff2d7; }
+.sentence-area { margin-top: 24px; padding: 20px; border-radius: 18px; background: #eee5d0; text-align: left; }
+.sentence-area h2 { font-size: 16px; }
+.sentence-strip { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: start; justify-content: flex-start; gap: 12px; overflow-x: auto; padding: 12px 4px; }
+.sentence-unit { flex: 0 0 150px; }
+.sentence-unit .word-card { width: 150px; }
+.sentence-unit.ending .word-card { border-color: #a36c28; background: #fff2d7; }
+.word-controls { display: flex; gap: 3px; margin-top: 6px; }
+.word-controls button { flex: 1; padding: 8px; }
+.ending-placeholder { flex: 0 0 150px; min-height: 150px; border: 2px dashed #aa9271; border-radius: 10px; display: grid; place-items: center; color: #735e43; }
+.sentence-text { font-size: 24px; overflow-wrap: anywhere; margin-top: 24px; }
+.sentence-partner .sentence-strip { background: #eee5d0; border-radius: 20px; padding: 24px; }
+.dialog-notice { color: #95352e; padding: 12px; border: 1px solid #ebc8c1; border-radius: 10px; }
+@media(max-width:600px) {
+  .sentence-book { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px; }
+  .sentence-area { padding: 12px; }
+}
 :root {
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
   color:#273e36;

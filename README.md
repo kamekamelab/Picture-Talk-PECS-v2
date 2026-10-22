@@ -5,16 +5,17 @@ PTP | Picture Talk PECS v2 開発管理
 特別支援学校で、カードを相手に渡して要求を伝える学習を支えるWebアプリ。
 旧 [Picture-Talk-PECS](https://github.com/kamekamelab/Picture-Talk-PECS) とは独立して開発します。
 
-## 現在の範囲（0.1.0）
+## 現在の範囲（0.2.0）
 
 - Phase 1：カードを取る → 渡す → 相手が受け取りを確認
+- Phase 4の基本：ことばのカードを並べ、最後に「ください」を置く日本語のSentence Strip。取り消し・並べ替え、文全体の交換、語順を保持した記録
 - 写真・イラスト・文字・マーク・カテゴリのカード編集
 - 先生用画面と生徒用画面の分離、長押しと任意のPIN
 - 交換ごとの日時・カード・呼び名・支援の有無の記録、CSV出力
 - IndexedDBによる保存、JSONバックアップと内容確認付き復元
 - Service Workerによるオフライン起動、ホーム画面追加用PWA
 
-**Phase 2〜4・Sentence Strip・印刷は未実装です。** [開発計画](docs/ROADMAP.md)を参照。
+**Phase 2・3、印刷、ドラッグ、要求表現の編集は未実装です。** Phase 4は「ください」の文をタップで作る基本機能に限ります。[確認済み仕様](docs/DECISIONS.md)と[開発計画](docs/ROADMAP.md)を参照。
 PECSの考え方を参考にした教育用アプリで、正式な研修や個別の指導計画を置き換えるものではありません。特にPhase 1・2では紙カードによる実際の交換との併用を想定します。
 
 ## ローカル起動
@@ -34,6 +35,10 @@ http://127.0.0.1:4175/ を開きます。停止はCtrl+C。
 ```sh
 npm run check
 ```
+
+このMacの同梱Nodeにはnpmがないため、検証は同梱Nodeの絶対パスで `--test tests/*.test.mjs` と `--check dist/app.js` 等を実行します。
+
+保存形式はv2です。0.1.0のv1データ・バックアップを読み込むとPhase 1として引き継ぎます。新版で保存したデータは旧アプリ版0.1.0では開けません。更新前のバックアップを保持してください。
 
 ## 保存とプライバシー
 
@@ -64,6 +69,7 @@ npm run check
 ## 資料
 
 - [設計](docs/DESIGN.md)
+- [会話で確認した仕様](docs/DECISIONS.md)
 - [開発計画と完了条件](docs/ROADMAP.md)
 - [検証記録](docs/VALIDATION.md)
 - [GitHub接続状況](docs/GITHUB.md)
