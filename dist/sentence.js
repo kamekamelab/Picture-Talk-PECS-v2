@@ -2,11 +2,11 @@ export const REQUEST = 'ください';
 export const COMMENTS = { see: { label: 'がみえます', emoji: '👀', question: 'なにが みえますか？' }, hear: { label: 'がきこえます', emoji: '👂', question: 'なにが きこえますか？' }, have: { label: 'をもっています', emoji: '🙌', question: 'なにを もっていますか？' } };
 export const commentEndings = Object.values(COMMENTS).map(c => c.label);
 export function endingWord(trial) { return trial.expression ?? REQUEST; }
-export function newSentenceTrial(expression) {
-  return { stage: 'choose', cardIds: [], ending: false, history: [], ...(expression !== undefined ? { expression } : {}) };
+export function newSentenceTrial(expression, everyday = false) {
+  return { stage: 'choose', cardIds: [], ending: false, history: [], ...(expression !== undefined ? { expression } : {}), ...(everyday ? { everyday: true } : {}) };
 }
 function remember(trial, next) {
-  const previous = { stage: trial.stage, cardIds: [...trial.cardIds], ending: trial.ending, ...(trial.expression !== undefined ? { expression: trial.expression } : {}) };
+  const previous = { stage: trial.stage, cardIds: [...trial.cardIds], ending: trial.ending, ...(trial.everyday ? { everyday: true } : {}), ...(trial.expression !== undefined ? { expression: trial.expression } : {}) };
   return { ...next, history: [...(trial.history || []), previous].slice(-100) };
 }
 export function sentenceWords(trial, cards) {
@@ -19,7 +19,7 @@ export function sentenceWords(trial, cards) {
   return trial.ending ? [...words, endingWord(trial)] : words;
 }
 export function sentenceTransition(trial, action, value, cards) {
-  if (action === 'reset') return newSentenceTrial(trial.expression);
+  if (action === 'reset') return newSentenceTrial(trial.expression, trial.everyday);
   if (action === 'undo') {
     if (!['choose', 'selected', 'partner'].includes(trial.stage)) throw new Error('受け取った記録は取り消せません。');
     const history = trial.history || [];
@@ -37,7 +37,7 @@ export function sentenceTransition(trial, action, value, cards) {
     next.cardIds.push(value);
     sentenceWords(next, cards);
   } else if (action === 'expression') {
-    if (trial.expression === undefined || !commentEndings.includes(value)) throw new Error('コメントの文末を選んでください。');
+    if (trial.expression === undefined || !(trial.everyday ? [REQUEST, ...commentEndings] : commentEndings).includes(value)) throw new Error('コメントの文末を選んでください。');
     next.expression = value; next.ending = true;
   } else if (action === 'ending') {
     if (!endingWord(next)) throw new Error('文末のカードを選んでください。');

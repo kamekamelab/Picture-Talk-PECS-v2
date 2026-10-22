@@ -1,4 +1,4 @@
-const CACHE = 'ptp-v2-shell-0.7.0-six-phases-r2';
+const CACHE = 'ptp-v2-shell-0.8.0-everyday-book-r3';
 const ROOT = new URL('./', self.location).href;
 const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'cards.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
 self.addEventListener('install', event => {

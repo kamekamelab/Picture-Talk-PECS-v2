@@ -32,7 +32,7 @@ test('旧版のカード・交換記録を保持して新しい保存形式へ�
   const legacy = { ...meta, phase: 1, cardId: 'ball', label: 'ボール', alias: 'テスト', support: 'assisted' };
   old.records.push(legacy);
   const migrated = validateState(old);
-  assert.equal(migrated.schemaVersion, 5);
+  assert.equal(migrated.schemaVersion, 6);
   assert.deepEqual(migrated.cards, old.cards);
   assert.deepEqual(migrated.records[0], legacy);
   assert.equal(migrated.records[0].kind, undefined);

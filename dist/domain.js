@@ -1,14 +1,14 @@
 import { cardLayout } from './cards.js';
 import { sentenceWords, commentEndings, COMMENTS } from './sentence.js';
 export const FORMAT = 'picture-talk-pecs-v2';
-export const SCHEMA = 5;
+export const SCHEMA = 6;
 export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 const safeImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const idPattern = /^[a-zA-Z0-9_-]{1,80}$/;
 export function initialState() {
   return {
     schemaVersion: SCHEMA,
-    profile: { alias: 'がくしゅうしゃ', cardId: 'juice', phase: 1, choiceIds: ['juice', 'ball'], commentMode: 'spontaneous' },
+    profile: { alias: 'がくしゅうしゃ', cardId: 'juice', phase: 1, choiceIds: ['juice', 'ball'], commentMode: 'spontaneous', mode: 'learning' },
     cards: [
       { id: 'juice', label: 'ジュース', category: 'のみもの', emoji: '🧃', image: null },
       { id: 'ball', label: 'ボール', category: 'あそび', emoji: '⚽', image: null },
@@ -33,7 +33,7 @@ function date(value) {
   return value;
 }
 export function validateState(input) {
-  if (!input || ![1, 2, 3, 4, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
+  if (!input || ![1, 2, 3, 4, 5, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
   if (!Array.isArray(input.cards) || input.cards.length < 1 || input.cards.length > 500) throw new Error('カードは1〜500枚にしてください。');
   const ids = new Set();
   const cards = input.cards.map(c => {
@@ -45,6 +45,8 @@ export function validateState(input) {
   if (!input.profile || !ids.has(input.profile.cardId)) throw new Error('学習用カードが見つかりません。');
   const phase = input.schemaVersion === 1 ? 1 : input.profile.phase;
   if (![1, 2, 3, 4, 5, 6].includes(phase)) throw new Error('対応していない学習段階です。');
+  const mode = input.profile.mode ?? 'learning';
+  if (!['learning', 'daily'].includes(mode)) throw new Error('画面の使い方が正しくありません。');
   const commentMode = input.profile.commentMode ?? 'spontaneous';
   if (!['spontaneous', ...Object.keys(COMMENTS)].includes(commentMode)) throw new Error('コメントの学習方法が正しくありません。');
   const choiceIds = input.profile.choiceIds ?? cards.slice(0, 2).map(c => c.id);
@@ -53,15 +55,16 @@ export function validateState(input) {
   if (!Array.isArray(input.records) || input.records.length > 100000) throw new Error('記録の形式が正しくありません。');
   const recordIds = new Set();
   const records = input.records.map(r => {
-    if (!r || recordIds.has(id(r.id)) || ![1, 2, 3, 4, 5, 6].includes(r.phase) || !['independent', 'assisted', 'unrated'].includes(r.support)) throw new Error('学習記録の形式が正しくありません。');
+    if (!r || recordIds.has(id(r.id)) || ![0, 1, 2, 3, 4, 5, 6].includes(r.phase) || !['independent', 'assisted', 'unrated'].includes(r.support)) throw new Error('学習記録の形式が正しくありません。');
     recordIds.add(r.id);
-    const record = { id: r.id, phase: r.phase, at: date(r.at), cardId: id(r.cardId), label: string(r.label, r.phase >= 4 ? 210 : 40, '記録のカード名・文'), alias: string(r.alias, 40, '記録の呼び名'), support: r.support };
+    const record = { id: r.id, phase: r.phase, at: date(r.at), cardId: id(r.cardId), label: string(r.label, (r.phase === 0 || r.phase >= 4) ? 210 : 40, '記録のカード名・文'), alias: string(r.alias, 40, '記録の呼び名'), support: r.support };
     if (r.kind !== undefined) {
       if (!['read', 'exchange'].includes(r.kind)) throw new Error('記録の種別が正しくありません。');
       record.kind = r.kind;
     }
-    if (r.phase >= 4) {
-      if (!Array.isArray(r.sentence) || r.sentence.length < 2 || r.sentence.length > 5 || !(r.phase === 6 ? commentEndings : ['ください']).includes(r.sentence.at(-1)) || r.sentence.slice(0, -1).some(word => (r.phase === 6 ? commentEndings : ['ください']).includes(word))) throw new Error('文末のカードを最後に置いてください。');
+    if (r.phase === 0 || r.phase >= 4) {
+      const endings = r.phase === 0 ? ['ください', ...commentEndings] : r.phase === 6 ? commentEndings : ['ください'];
+      if (!Array.isArray(r.sentence) || r.sentence.length < 2 || r.sentence.length > 5 || !endings.includes(r.sentence.at(-1)) || r.sentence.slice(0, -1).some(word => endings.includes(word))) throw new Error('文末のカードを最後に置いてください。');
       record.sentence = r.sentence.map(word => string(word, 40, '文のことば'));
       if (record.label !== record.sentence.join(' ')) throw new Error('記録の文とカードの順序が一致しません。');
     }
@@ -81,7 +84,7 @@ export function validateState(input) {
   const speechSettings = { pauses: speech.pauses ?? true, onSelect: speech.onSelect ?? false, voiceURI: string(speech.voiceURI, 500, '読み上げ音声', true), rate: speech.rate };
   const clean = {
     schemaVersion: SCHEMA,
-    profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId, phase, choiceIds, commentMode },
+    profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId, phase, choiceIds, commentMode, mode },
     cards, records,
     settings: { showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null, speech: speechSettings },
     lastBackupAt: input.lastBackupAt === null ? null : date(input.lastBackupAt)
@@ -103,16 +106,17 @@ export function parseBackup(text) {
 export function newTrial() { return { stage: 'choose', cardId: null }; }
 export function readingRecord(state, trial, { id, at }) {
   if (trial.stage !== 'selected') throw new Error('カードを選んでから読み上げてください。');
-  const phase = state.profile.phase;
-  const card = state.cards.find(c => c.id === (phase >= 4 ? trial.cardIds.at(-1) : trial.cardId));
+  const phase = state.profile.mode === 'daily' ? 0 : state.profile.phase;
+  const sentencePhase = phase === 0 || phase >= 4;
+  const card = state.cards.find(c => c.id === (sentencePhase ? trial.cardIds.at(-1) : trial.cardId));
   if (!card) throw new Error('読み上げるカードが見つかりません。');
-  if (phase >= 4 && (!trial.ending || !trial.cardIds.length)) throw new Error('文を作ってから読み上げてください。');
-  const words = phase >= 4 ? sentenceWords(trial, state.cards) : [card.label];
+  if (sentencePhase && (!trial.ending || !trial.cardIds.length)) throw new Error('文を作ってから読み上げてください。');
+  const words = sentencePhase ? sentenceWords(trial, state.cards) : [card.label];
   const record = { id, at, phase, kind: 'read', cardId: card.id, label: words.join(' '), alias: state.profile.alias, support: 'unrated' };
-  if (phase >= 4) record.sentence = words;
+  if (sentencePhase) record.sentence = words;
   if (phase === 5) record.context = 'なにが ほしいですか？';
   if (phase === 6) record.context = state.profile.commentMode === 'spontaneous' ? '自分からのコメント' : COMMENTS[state.profile.commentMode].question;
-  if (phase >= 4 && !(phase === 6 ? commentEndings : ['ください']).includes(words.at(-1))) throw new Error('学習段階に合う文末のカードを選んでください。');
+  if (sentencePhase && !(phase === 0 ? ['ください', ...commentEndings] : phase === 6 ? commentEndings : ['ください']).includes(words.at(-1))) throw new Error('学習段階に合う文末のカードを選んでください。');
   return record;
 }
 export function transition(trial, action, cardId) {
@@ -129,5 +133,5 @@ export function csv(records) {
     return `"${s.replaceAll('"', '""')}"`;
   };
   const names = { independent: '自分から', assisted: '支援あり', unrated: '未評価' };
-  return '\uFEFF' + [['日時', '呼び名', 'Phase', '種別', 'カード・文', '支援', 'きっかけ'], ...records.map(r => [r.at, r.alias, r.phase, r.kind === 'read' ? '読み上げ' : '過去の交換', r.label, names[r.support], r.context || ''])].map(row => row.map(cell).join(',')).join('\r\n');
+  return '\uFEFF' + [['日時', '呼び名', 'Phase', '種別', 'カード・文', '支援', 'きっかけ'], ...records.map(r => [r.at, r.alias, r.phase === 0 ? 'ふだん使い' : r.phase, r.kind === 'read' ? '読み上げ' : '過去の交換', r.label, names[r.support], r.context || ''])].map(row => row.map(cell).join(',')).join('\r\n');
 }
