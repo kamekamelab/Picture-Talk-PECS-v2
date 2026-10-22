@@ -1,6 +1,7 @@
 import { newTrial, transition, backupText, parseBackup, csv, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
 import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
+import { createReader, localJapaneseVoice } from './speech.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -22,6 +23,31 @@ let unlocked = false;
 let imageBusy = false;
 let editorToken = 0;
 let pendingRecord = null;
+const reader = createReader({
+  synth: window.speechSynthesis,
+  Utterance: window.SpeechSynthesisUtterance,
+  onState: (reading, result) => {
+    document.querySelectorAll('[data-action="speak"]').forEach(button => {
+      button.setAttribute('aria-pressed', String(reading));
+      button.setAttribute('aria-label', reading ? 'よみあげをとめる' : 'ぶんをよみあげる');
+      button.querySelector('.speech-label').textContent = reading ? 'とめる' : 'よむ';
+    });
+    if (result === 'finished') toast('よみあげました。');
+  },
+  onError: message => toast(message)
+});
+function voiceStatus() {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return 'このブラウザーでは読み上げを利用できません。';
+  return localJapaneseVoice(window.speechSynthesis.getVoices()) ? '端末内の日本語音声を使えます。生徒画面の「よむ」を押すと読み上げます。' : '端末内の日本語音声が見つかりません。端末に日本語音声を準備してから、もう一度開いてください。';
+}
+window.speechSynthesis?.addEventListener('voiceschanged', () => {
+  const status = document.querySelector('#voice-status');
+  if (status) status.textContent = voiceStatus();
+});
+// 音声一覧の準備のみ。利用者が「よむ」を押すまでは読み上げない。
+window.speechSynthesis?.getVoices();
+document.addEventListener('visibilitychange', () => { if (document.hidden) reader.stop(); });
+window.addEventListener('pagehide', () => reader.stop());
 
 function toast(text) {
   notice.textContent = text;
@@ -50,7 +76,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.2.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.3.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
@@ -72,7 +98,7 @@ function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
 }
 function settingsView() {
-  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">効果音・自動読み上げ・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
+  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。自動再生・効果音・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p><p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
 function sentenceStrip(editable = false) {
   const items = trial.cardIds.map((id, index) => {
@@ -82,10 +108,15 @@ function sentenceStrip(editable = false) {
   const ending = trial.ending ? `<div class="sentence-unit ending"><div class="word-card"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></div>${editable ? '<button class="quiet" data-sentence-action="ending" aria-label="くださいを外す">×</button>' : ''}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
   return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
 }
+function sentenceBoard(editable = false) {
+  const complete = ['selected', 'partner'].includes(trial.stage);
+  const hasCards = trial.cardIds.length > 0 || trial.ending;
+  return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool clear-tool" data-action="reset" aria-label="ぶんをとりけす" ${hasCards ? '' : 'disabled'}><span class="cancel-symbol" aria-hidden="true">×</span><span>とりけす</span></button></div></div>`;
+}
 function sentenceView() {
   if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>ぶんを わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
-  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceStrip()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
-  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" aria-pressed="${trial.ending}"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceStrip(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button><button class="text-button" data-action="reset">ぜんぶ もどす</button></main>`;
+  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceBoard()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
+  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" aria-pressed="${trial.ending}"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button></main>`;
 }
 function studentView() {
   if (state.profile.phase === 4) return sentenceView();
@@ -177,6 +208,7 @@ function recordDialog() {
 document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
+  if (button.dataset.action !== 'speak') reader.stop();
   if (button.tagName === 'A') event.preventDefault();
   if (button.dataset.sentenceAction) {
     try { trial = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards); render(); } catch (error) { toast(error.message); }
@@ -204,6 +236,14 @@ document.addEventListener('click', event => {
   }
   const action = button.dataset.action;
   if (!action) return;
+  if (action === 'speak') {
+    if (reader.reading) { reader.stop(); return; }
+    try {
+      if (state.profile.phase !== 4 || !['selected', 'partner'].includes(trial.stage)) throw new Error('ぶんを つくってから よもう。');
+      reader.read(sentenceWords(trial, state.cards));
+    } catch (error) { toast(error.message); }
+    return;
+  }
   if (action === 'close-dialog') return closeDialog();
   if (action === 'teacher') return teacherGate();
   if (action === 'home') { screen = 'home'; render(); return; }

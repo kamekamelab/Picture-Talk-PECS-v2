@@ -25,9 +25,18 @@
 .word-card strong { font-size: 20px; overflow-wrap: anywhere; max-width: 100%; }
 .sentence-book .word-card:disabled { opacity: .45; }
 .request-choice { border-color: #a36c28; background: #fff2d7; }
-.sentence-area { margin-top: 24px; padding: 20px; border-radius: 18px; background: #eee5d0; text-align: left; }
+.sentence-area { margin-top: 24px; padding: 20px; border: 2px solid #b66b13; border-radius: 18px; background: #e99522; text-align: left; color: #35230e; }
 .sentence-area h2 { font-size: 16px; }
-.sentence-strip { overflow-x: auto; padding: 12px 4px; }
+.sentence-strip { min-width: 0; overflow-x: auto; padding: 12px 4px; }
+.sentence-board { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: start; gap: 16px; }
+.strip-tools { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.strip-tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 88px; min-height: 84px; padding: 12px 6px; color: #fff8e9; background: #704414; border: 2px solid #57310c; border-radius: 14px; font-size: 13px; font-weight: 650; }
+.strip-tool:disabled { opacity: .5; }
+.strip-tool svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.strip-tool[aria-pressed="true"] { background: #442707; }
+.strip-tool:focus-visible { outline-color: #fff; }
+.cancel-symbol { display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid currentColor; border-radius: 50%; font-size: 30px; font-weight: 400; line-height: 1; }
+.sentence-area .word-controls .quiet, .sentence-area .ending > .quiet { background: #fff1d5; color: #57310c; }
 .sentence-track {
   position: relative;
   isolation: isolate;
@@ -66,11 +75,14 @@
 .word-controls button { flex: 1; padding: 8px; }
 .ending-placeholder { flex: 0 0 150px; min-height: 150px; border: 2px dashed #aa9271; border-radius: 10px; display: grid; place-items: center; color: #735e43; }
 .sentence-text { font-size: 24px; overflow-wrap: anywhere; margin-top: 24px; }
-.sentence-partner .sentence-strip { background: #eee5d0; border-radius: 20px; padding: 24px; }
+.sentence-partner .sentence-board { background: #e99522; border: 2px solid #b66b13; border-radius: 20px; padding: 24px; }
 .dialog-notice { color: #95352e; padding: 12px; border: 1px solid #ebc8c1; border-radius: 10px; }
 @media(max-width:600px) {
   .sentence-book { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px; }
   .sentence-area { padding: 12px; }
+  .sentence-board { grid-template-columns: minmax(0, 1fr) 64px; gap: 8px; }
+  .strip-tool { width: 64px; min-height: 76px; font-size: 11px; }
+  .sentence-partner .sentence-board { padding: 12px; }
 }
 :root {
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
