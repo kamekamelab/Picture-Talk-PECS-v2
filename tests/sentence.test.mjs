@@ -46,7 +46,7 @@ test('存在しないカード・重複・枚数超過を処理する', () => {
 test('旧版の保存データとバックアップをPhase 1として引き継ぐ', () => {
   const old = initialState(); old.schemaVersion = 1; delete old.profile.phase;
   const migrated = validateState(old);
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.profile.phase, 1);
   assert.equal(old.schemaVersion, 1);
   assert.deepEqual(migrated.cards, old.cards);

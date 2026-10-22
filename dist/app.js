@@ -1,4 +1,4 @@
-import { newTrial, transition, backupText, parseBackup, csv, MAX_BACKUP_BYTES } from './domain.js';
+import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
 import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
 import { createReader, localJapaneseVoice, localJapaneseVoices } from './speech.js';
@@ -23,18 +23,26 @@ let unlocked = false;
 let imageBusy = false;
 let editorToken = 0;
 let pendingRecord = null;
+let pendingReading = null;
 const reader = createReader({
   synth: window.speechSynthesis,
   Utterance: window.SpeechSynthesisUtterance,
   onState: (reading, result) => {
     document.querySelectorAll('[data-action="speak"]').forEach(button => {
       button.setAttribute('aria-pressed', String(reading));
-      button.setAttribute('aria-label', reading ? 'よみあげをとめる' : 'ぶんをよみあげる');
+      button.setAttribute('aria-label', reading ? 'よみあげをとめる' : `${button.dataset.speechSubject || 'ぶん'}をよみあげる`);
       button.querySelector('.speech-label').textContent = reading ? 'とめる' : 'よむ';
     });
-    if (result === 'finished') toast('よみあげました。');
+    if (result === 'finished') {
+      const record = pendingReading; pendingReading = null;
+      if (record) run(async () => {
+        const next = structuredClone(state); next.records.push({ ...record, at: now() });
+        await persist(next); toast('よみあげました。');
+      });
+      else toast('よみあげました。');
+    }
   },
-  onError: message => toast(message)
+  onError: message => { pendingReading = null; toast(message); }
 });
 function voiceStatus() {
   if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return 'このブラウザーでは読み上げを利用できません。';
@@ -48,8 +56,8 @@ window.speechSynthesis?.addEventListener('voiceschanged', () => {
 });
 // 音声一覧の準備のみ。利用者が「よむ」を押すまでは読み上げない。
 window.speechSynthesis?.getVoices();
-document.addEventListener('visibilitychange', () => { if (document.hidden) reader.stop(); });
-window.addEventListener('pagehide', () => reader.stop());
+document.addEventListener('visibilitychange', () => { if (document.hidden) { pendingReading = null; reader.stop(); } });
+window.addEventListener('pagehide', () => { pendingReading = null; reader.stop(); });
 function voiceOptions(selected = state.settings.speech.voiceURI) {
   const voices = localJapaneseVoices(window.speechSynthesis?.getVoices() || []);
   return '<option value="">端末の標準音声</option>' + voices.map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === selected ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
@@ -85,23 +93,23 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.4.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.5.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
-  return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、交換の学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
-  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚を交換する</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><p class="hint">相手がカードを受け取り、欲しい物や活動につなげます。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
-  <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${image(card, true)}<strong>${esc(card.label)}</strong></div><p class="muted">大きなカードで、ゆっくり交換。</p></section></div>
-  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚をわたすところから。</h2><p>Phase 1と、Phase 4の「ことば＋ください」を使えます。Phase 2・3は今後追加します。</p></div></section>`;
+  return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、つたえる学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
+  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><p class="hint">カードを選び、「よむ」で相手につたえます。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
+  <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${image(card, true)}<strong>${esc(card.label)}</strong></div><p class="muted">大きなカードで、つたえよう。</p></section></div>
+  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1と、Phase 4の「ことば＋ください」を使えます。Phase 2・3は今後追加します。</p></div></section>`;
 }
 function cardsView() {
   return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${image(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
 }
 function recordsView() {
   const today = new Date().toLocaleDateString('ja-JP');
-  const records = state.records.filter(r => new Date(r.at).toLocaleDateString('ja-JP') === today);
+  const records = state.records.filter(r => r.kind === 'read' && new Date(r.at).toLocaleDateString('ja-JP') === today);
   const names = { independent: '自分から', assisted: '支援あり', unrated: '未評価' };
-  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>伝わったことを、残す。</h1><p class="muted">受け取りを確認した交換を、1回ずつ保存しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の交換',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード</th><th>Phase</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>${r.phase}</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードを交換すると、ここに残ります。</p></div>'}</section>`;
+  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>つたえる学習を、残す。</h1><p class="muted">最後まで読み上げた回数を保存します。過去の交換記録とは区別しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の読み上げ',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード・文</th><th>Phase</th><th>種別</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>${r.phase}</td><td>${r.kind === 'read' ? '読み上げ' : '過去の交換'}</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードや文を最後まで読み上げると、ここに残ります。</p></div>'}</section>`;
 }
 function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
@@ -156,21 +164,18 @@ function sentenceStrip(editable = false) {
   return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
 }
 function sentenceBoard(editable = false) {
-  const complete = ['selected', 'partner'].includes(trial.stage);
+  const complete = trial.stage === 'selected';
   const canUndo = Boolean(trial.history?.length);
   return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool undo-tool" data-sentence-action="undo" aria-label="ひとつもどす" ${canUndo ? '' : 'disabled'}><span class="undo-symbol" aria-hidden="true">↶</span><span>ひとつ<br>もどす</span></button></div></div>`;
 }
 function sentenceView() {
-  if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>ぶんを わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
-  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceBoard()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button></main>`;
-  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button></main>`;
+  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
 }
 function studentView() {
   if (state.profile.phase === 4) return sentenceView();
   const card = state.cards.find(c => c.id === (trial.cardId || state.profile.cardId));
-  if (trial.stage === 'partner') return `<main class="student partner"><p class="eyebrow">あいてに みせよう</p><h1>これを ください</h1><div class="student-card static-card" aria-label="${esc(card.label)}">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
-  if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>あいてに わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
-  return `<main class="student"><p class="eyebrow">カードで つたえよう</p><h1>${trial.stage === 'choose' ? 'カードを とろう' : 'あいてに わたそう'}</h1><div class="exchange-layout"><section class="book-space" aria-label="カードブック"><span class="space-label">カード</span>${trial.stage === 'choose' ? `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをとる">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</button>` : '<div class="card-placeholder" aria-hidden="true"></div>'}</section><span class="exchange-arrow" aria-hidden="true">→</span><section class="give-space" aria-label="わたすところ"><span class="space-label">わたすところ</span>${trial.stage === 'selected' ? `<div class="student-card selected static-card">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div>` : '<div class="card-placeholder"><span aria-hidden="true">＋</span></div>'}</section></div><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>わたす</button>${trial.stage === 'selected' ? '<button class="text-button" data-action="reset">カードを もどす</button>' : ''}</main>`;
+  const selected = trial.stage === 'selected';
+  return `<main class="student"><p class="eyebrow">カードで つたえよう</p><h1>${selected ? 'よんで つたえよう' : 'カードを えらぼう'}</h1><div class="exchange-layout"><section class="book-space" aria-label="カードブック"><span class="space-label">カード</span>${selected ? '<div class="card-placeholder" aria-hidden="true"></div>' : `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをえらぶ">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</button>`}</section><span class="exchange-arrow" aria-hidden="true">→</span><section class="give-space" aria-label="えらんだカード"><span class="space-label">えらんだカード</span>${selected ? `<button class="student-card selected" data-action="reset" aria-label="${esc(card.label)}をブックにもどす">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</button>` : '<div class="card-placeholder" aria-hidden="true"><span>＋</span></div>'}</section></div><button class="primary read-card-button" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span> <span class="speech-label">よむ</span></button></main>`;
 }
 async function persist(next) {
   const clean = await writeState(next);
@@ -230,7 +235,6 @@ async function pinHash(pin, salt) {
   return [...new Uint8Array(result)].map(n=>n.toString(16).padStart(2,'0')).join('');
 }
 function teacherGate() {
-  if (trial.stage === 'received' && !pendingRecord) return enterTeacher();
   modal('先生用画面へ', '<p>先生が操作してください。</p><button class="primary wide" id="hold-teacher">ここを 1.5秒 長押し</button><p class="hint">キーボードではスペースキーを長押ししてください。</p>');
   const hold = dialog.querySelector('#hold-teacher');
   let timer;
@@ -248,14 +252,14 @@ function enterTeacher() {
   } else { screen = 'home'; closeDialog(); render(); }
 }
 function recordDialog() {
-  modal('先生用：今回の様子', '<p>欲しい物や活動につなげてから、様子を記録してください。</p><div class="record-choices"><button class="primary" data-support="independent">自分から</button><button class="secondary" data-support="assisted">支援あり</button><button class="quiet" data-support="unrated">あとで評価する</button></div>');
+  modal('先生用：今回の様子', '<p>今回の学習の様子を選んでください。</p><div class="record-choices"><button class="primary" data-support="independent">自分から</button><button class="secondary" data-support="assisted">支援あり</button><button class="quiet" data-support="unrated">あとで評価する</button></div>');
   dialog.querySelector('[data-action="close-dialog"]').hidden = true;
 }
 
 document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
-  if (button.dataset.action !== 'speak') reader.stop();
+  if (button.dataset.action !== 'speak') { pendingReading = null; reader.stop(); }
   if (button.tagName === 'A') event.preventDefault();
   if (button.dataset.sentenceAction) {
     try {
@@ -288,11 +292,12 @@ document.addEventListener('click', event => {
   const action = button.dataset.action;
   if (!action) return;
   if (action === 'speak') {
-    if (reader.reading) { reader.stop(); return; }
+    if (reader.reading) { pendingReading = null; reader.stop(); return; }
     try {
-      if (state.profile.phase !== 4 || !['selected', 'partner'].includes(trial.stage)) throw new Error('ぶんを つくってから よもう。');
-      reader.read(sentenceWords(trial, state.cards), state.settings.speech);
-    } catch (error) { toast(error.message); }
+      const record = readingRecord(state, trial, { id: uid(), at: now() });
+      pendingReading = record;
+      reader.read(record.sentence || [record.label], state.settings.speech);
+    } catch (error) { pendingReading = null; toast(error.message); }
     return;
   }
   if (action === 'preview-speech') {
@@ -305,24 +310,13 @@ document.addEventListener('click', event => {
   if (action === 'teacher') return teacherGate();
   if (action === 'home') { screen = 'home'; render(); return; }
   if (action === 'new-card') return cardEditor();
-  if (action === 'select' || action === 'give' || action === 'reset') {
+  if (action === 'select' || action === 'reset') {
     if (pendingRecord) return recordDialog();
     try { trial = state.profile.phase === 4 ? sentenceTransition(trial, action, null, state.cards) : transition(trial, action, state.profile.cardId); render(); } catch (error) { toast(error.message); } return;
   }
   if (action === 'remove-image') { if (imageBusy) return; draftImage = null; dialog.querySelector('#image-preview').innerHTML = '<span class="card-emoji">▧</span>'; return; }
   run(async () => {
-    if (action === 'receive') {
-      const sentenceMode = state.profile.phase === 4;
-      const nextTrial = sentenceMode ? sentenceTransition(trial, 'receive', null, state.cards) : transition(trial, 'receive');
-      const card = state.cards.find(c=>c.id===(sentenceMode ? trial.cardIds.at(-1) : trial.cardId));
-      const sentence = sentenceMode ? sentenceWords(trial, state.cards) : null;
-      const record = { id: uid(), phase: state.profile.phase, at: now(), cardId: card.id, label: sentence ? sentence.join(' ') : card.label, alias: state.profile.alias, support: 'unrated' };
-      if (sentence) record.sentence = sentence;
-      const next = structuredClone(state); next.records.push(record);
-      await persist(next);
-      trial = nextTrial; pendingRecord = record;
-      render(); recordDialog();
-    } else if (action === 'delete-card') {
+    if (action === 'delete-card') {
       if (imageBusy || state.cards.length === 1) return;
       const card = state.cards.find(c => c.id === editedId);
       modal('カードの削除を確認', `<p>「${esc(card.label)}」を削除します。過去の学習記録は残ります。</p><p class="hint">必要な画像は、先にバックアップに保存してください。</p><button class="danger wide" data-action="delete-card-confirm">このカードを削除する</button>`);

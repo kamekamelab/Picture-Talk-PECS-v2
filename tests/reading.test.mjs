@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { initialState, readingRecord, validateState, backupText, parseBackup, newTrial, transition, csv } from '../dist/domain.js';
+import { newSentenceTrial, sentenceTransition } from '../dist/sentence.js';
+const meta = { id: 'reading_1', at: '2026-10-22T00:00:00.000Z' };
+test('1枚のカードは選んだ状態から読み上げ記録を作れ、交換成立にはしない', () => {
+  const state = initialState();
+  assert.throws(() => readingRecord(state, newTrial(), meta));
+  const selected = transition(newTrial(), 'select', 'ball');
+  const record = readingRecord(state, selected, meta);
+  assert.equal(record.kind, 'read');
+  assert.equal(record.label, 'ボール');
+  assert.equal(record.support, 'unrated');
+  assert.equal(record.phase, 1);
+  assert.equal(state.records.length, 0);
+});
+test('文を渡したり受け取ったりしなくても日本語の読み上げ記録を作れる', () => {
+  const state = initialState(); state.profile.phase = 4;
+  let trial = sentenceTransition(newSentenceTrial(), 'select', 'ball', state.cards);
+  assert.throws(() => readingRecord(state, trial, meta));
+  trial = sentenceTransition(trial, 'ending', null, state.cards);
+  const record = readingRecord(state, trial, meta);
+  assert.deepEqual(record.sentence, ['ボール', 'ください']);
+  assert.equal(record.kind, 'read');
+  assert.equal(trial.stage, 'selected');
+  state.records.push(record);
+  assert.deepEqual(parseBackup(backupText(state)), state);
+  assert.ok(csv(state.records).includes('読み上げ'));
+});
+test('旧版のカード・交換記録を保持して新しい保存形式へ移行する', () => {
+  const old = initialState(); old.schemaVersion = 2;
+  const legacy = { ...meta, phase: 1, cardId: 'ball', label: 'ボール', alias: 'テスト', support: 'assisted' };
+  old.records.push(legacy);
+  const migrated = validateState(old);
+  assert.equal(migrated.schemaVersion, 3);
+  assert.deepEqual(migrated.cards, old.cards);
+  assert.deepEqual(migrated.records[0], legacy);
+  assert.equal(migrated.records[0].kind, undefined);
+  assert.ok(csv(migrated.records).includes('過去の交換'));
+  migrated.records[0].kind = 'success';
+  assert.throws(() => validateState(migrated), /種別/);
+});

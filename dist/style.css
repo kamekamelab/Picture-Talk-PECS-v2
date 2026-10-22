@@ -79,6 +79,7 @@
 .sentence-partner .sentence-board { background: #e99522; border: 2px solid #b66b13; border-radius: 20px; padding: 24px; }
 .dialog-notice { color: #95352e; padding: 12px; border: 1px solid #ebc8c1; border-radius: 10px; }
 .speech-setting-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.read-card-button { display: block; width: 330px; max-width: 100%; min-height: 72px; margin: 28px auto 0; font-size: 25px; padding: 18px; }
 @media(max-width:600px) {
   .sentence-book { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px; }
   .sentence-area { padding: 12px; }

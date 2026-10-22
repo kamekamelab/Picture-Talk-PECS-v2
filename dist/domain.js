@@ -1,5 +1,6 @@
+import { sentenceWords } from './sentence.js';
 export const FORMAT = 'picture-talk-pecs-v2';
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 const safeImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const idPattern = /^[a-zA-Z0-9_-]{1,80}$/;
@@ -31,7 +32,7 @@ function date(value) {
   return value;
 }
 export function validateState(input) {
-  if (!input || ![1, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
+  if (!input || ![1, 2, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
   if (!Array.isArray(input.cards) || input.cards.length < 1 || input.cards.length > 500) throw new Error('カードは1〜500枚にしてください。');
   const ids = new Set();
   const cards = input.cards.map(c => {
@@ -49,6 +50,10 @@ export function validateState(input) {
     if (!r || recordIds.has(id(r.id)) || ![1, 4].includes(r.phase) || !['independent', 'assisted', 'unrated'].includes(r.support)) throw new Error('学習記録の形式が正しくありません。');
     recordIds.add(r.id);
     const record = { id: r.id, phase: r.phase, at: date(r.at), cardId: id(r.cardId), label: string(r.label, r.phase === 4 ? 180 : 40, '記録のカード名・文'), alias: string(r.alias, 40, '記録の呼び名'), support: r.support };
+    if (r.kind !== undefined) {
+      if (!['read', 'exchange'].includes(r.kind)) throw new Error('記録の種別が正しくありません。');
+      record.kind = r.kind;
+    }
     if (r.phase === 4) {
       if (!Array.isArray(r.sentence) || r.sentence.length < 2 || r.sentence.length > 5 || r.sentence.at(-1) !== 'ください' || r.sentence.slice(0, -1).some(word => word === 'ください')) throw new Error('「ください」は文の最後に置いてください。');
       record.sentence = r.sentence.map(word => string(word, 40, '文のことば'));
@@ -84,6 +89,17 @@ export function parseBackup(text) {
   return validateState(input.data);
 }
 export function newTrial() { return { stage: 'choose', cardId: null }; }
+export function readingRecord(state, trial, { id, at }) {
+  if (trial.stage !== 'selected') throw new Error('カードを選んでから読み上げてください。');
+  const phase = state.profile.phase;
+  const card = state.cards.find(c => c.id === (phase === 4 ? trial.cardIds.at(-1) : trial.cardId));
+  if (!card) throw new Error('読み上げるカードが見つかりません。');
+  if (phase === 4 && (!trial.ending || !trial.cardIds.length)) throw new Error('文を作ってから読み上げてください。');
+  const words = phase === 4 ? sentenceWords(trial, state.cards) : [card.label];
+  const record = { id, at, phase, kind: 'read', cardId: card.id, label: words.join(' '), alias: state.profile.alias, support: 'unrated' };
+  if (phase === 4) record.sentence = words;
+  return record;
+}
 export function transition(trial, action, cardId) {
   if (action === 'reset') return newTrial();
   if (action === 'select' && trial.stage === 'choose' && cardId) return { stage: 'selected', cardId };
@@ -98,5 +114,5 @@ export function csv(records) {
     return `"${s.replaceAll('"', '""')}"`;
   };
   const names = { independent: '自分から', assisted: '支援あり', unrated: '未評価' };
-  return '\uFEFF' + [['日時', '呼び名', 'Phase', 'カード', '支援'], ...records.map(r => [r.at, r.alias, r.phase, r.label, names[r.support]])].map(row => row.map(cell).join(',')).join('\r\n');
+  return '\uFEFF' + [['日時', '呼び名', 'Phase', '種別', 'カード・文', '支援'], ...records.map(r => [r.at, r.alias, r.phase, r.kind === 'read' ? '読み上げ' : '過去の交換', r.label, names[r.support]])].map(row => row.map(cell).join(',')).join('\r\n');
 }
