@@ -1,6 +1,6 @@
-const CACHE = 'ptp-v2-shell-0.5.0-read-only-flow';
+const CACHE = 'ptp-v2-shell-0.6.0-paper-and-phases-r3';
 const ROOT = new URL('./', self.location).href;
-const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
+const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'cards.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });

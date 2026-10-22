@@ -10,11 +10,11 @@ export function localJapaneseVoice(voices, preferredURI = '') {
     || local[0]
     || null;
 }
-export function speechText(words) {
+export function speechText(words, pauses = false) {
   if (!Array.isArray(words) || !words.length || words.some(w => typeof w !== 'string' || !w.trim())) throw new Error('よみあげるカードを選んでください。');
-  // カード間の強制的な休止を除き、音声エンジンに文全体の韻律を任せる。
+  // 間をあける設定では読点を入れる。休止の実際の長さは端末の音声エンジンに依存する。
   // 助詞や語尾の自動補完はしない。例：「まって」「ください」もそのままつなぐ。
-  return words.map(w => w.trim()).join('').replace(/。+$/, '') + '。';
+  return words.map(w => w.trim()).join(pauses ? '、' : '').replace(/。+$/, '') + '。';
 }
 export function createReader({ synth, Utterance, onState = () => {}, onError = () => {} }) {
   let active = null;
@@ -26,8 +26,8 @@ export function createReader({ synth, Utterance, onState = () => {}, onError = (
     if (wasActive) synth?.cancel();
     onState(false);
   }
-  function read(words, { voiceURI = '', rate = 1 } = {}) {
-    const text = speechText(words);
+  function read(words, { voiceURI = '', rate = 1, pauses = true } = {}) {
+    const text = speechText(words, pauses);
     if (!synth || !Utterance) throw new Error('このブラウザーでは読み上げを利用できません。');
     if (![.85, 1, 1.1].includes(rate)) throw new Error('読み上げの速さを選び直してください。');
     const voice = localJapaneseVoice(synth.getVoices(), voiceURI);

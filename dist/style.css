@@ -929,3 +929,50 @@ dialog::backdrop {
     scroll-behavior:auto!important
   }
 }
+/* 写真・文字の配置は紙とデジタルで共通。 */
+.card-face { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; width:100%; height:100%; min-width:0; overflow:hidden; }
+.card-face.label-top strong { order:-1; }
+.card-face strong { width:100%; text-align:center; overflow-wrap:anywhere; line-height:1.3; flex:0 0 auto; }
+.card-face.text-small strong { font-size:16px; }
+.card-face.text-medium strong { font-size:20px; }
+.card-face.text-large strong { font-size:26px; }
+.card-face .card-image { flex:1 1 0; min-height:0; max-height:100%; height:0; object-fit:contain; }
+.card-face .card-emoji { flex:1 1 0; min-height:0; display:flex; align-items:center; justify-content:center; font-size:64px; }
+.word-card { height:150px; }
+.student-card .card-face.text-small strong { font-size:20px; }
+.student-card .card-face.text-medium strong { font-size:26px; }
+.student-card .card-face.text-large strong { font-size:34px; }
+.choice-book { grid-template-columns:repeat(auto-fit,minmax(150px,210px)); justify-content:center; }
+.choice-settings, fieldset { border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:20px; }
+.choice-settings .check, .print-choices .check { margin:8px 0; }
+.print-choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; }
+.print-preview { overflow:auto; margin-top:24px; }
+.print-page { width:210mm; height:297mm; padding:10mm; margin:0 auto 20px; display:grid; grid-auto-rows:max-content; gap:3mm; align-content:start; background:white; color:black; box-shadow:0 2px 12px #0002; }
+.print-page.columns-4 { grid-template-columns:repeat(4,45mm); }
+.print-page.columns-5 { grid-template-columns:repeat(5,35mm); }
+.print-page.columns-6 { grid-template-columns:repeat(6,25mm); }
+.paper-card { border:.25mm solid #333; padding:1mm; overflow:hidden; background:white; }
+.print-size-45 .paper-card { width:45mm; height:45mm; }
+.print-size-35 .paper-card { width:35mm; height:35mm; }
+.print-size-25 .paper-card { width:25mm; height:25mm; }
+.paper-card .card-face { gap:.6mm; }
+.paper-card .card-face.text-small strong { font-size:2.8mm; }
+.paper-card .card-face.text-medium strong { font-size:3.5mm; }
+.paper-card .card-face.text-large strong { font-size:4.5mm; }
+.print-size-45 .paper-card strong { zoom:1.28; }
+.print-size-25 .paper-card strong { zoom:.72; }
+.paper-card .card-emoji { font-size:16mm; line-height:1; }
+.print-size-25 .paper-card .card-emoji { font-size:11mm; }
+.print-size-45 .paper-card .card-emoji { font-size:22mm; }
+@page { size:A4 portrait; margin:10mm; }
+@media print {
+  html,body { background:white; }
+  .shell { max-width:none; margin:0; padding:0; }
+  .top,.nav,footer,.no-print,#notice,dialog,#main > :not(.print-preview) { display:none!important; }
+  .print-preview { overflow:visible; margin:0; }
+  .print-page { width:190mm; height:277mm; padding:0; margin:0; box-shadow:none; break-after:page; page-break-after:always; }
+  .print-page:last-child { break-after:auto; page-break-after:auto; }
+  .paper-card { break-inside:avoid; page-break-inside:avoid; }
+}
+
+.sentence-track > .word-card { width:150px; flex:0 0 150px; }

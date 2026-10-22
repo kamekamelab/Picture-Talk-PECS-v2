@@ -42,7 +42,7 @@ test('存在しない学習カード・未対応Phase・不正な評価を復元
   state.profile.cardId = 'missing';
   assert.throws(() => validateState(state));
   state.profile.cardId = 'juice';
-  state.records.push({ id: 'r1', phase: 2, cardId: 'juice', label: 'J', alias: 'A', at: '2026-10-21T00:00:00.000Z', support: 'independent' });
+  state.records.push({ id: 'r1', phase: 9, cardId: 'juice', label: 'J', alias: 'A', at: '2026-10-21T00:00:00.000Z', support: 'independent' });
   assert.throws(() => validateState(state));
   state.records[0].phase = 1; state.records[0].support = 'automatic';
   assert.throws(() => validateState(state));
@@ -63,15 +63,15 @@ test('未知のキーを除去し復元したデータを正規化する', () =>
 test('バックアップから復元できない総量になる前に保存を止める', () => {
   const state = initialState();
   state.cards = Array.from({length:14}, (_,i) => ({ ...state.cards[0], id:'c'+i, image:'data:image/png;base64,'+'A'.repeat(1950000) }));
-  state.profile.cardId = 'c0';
+  state.profile.cardId = 'c0'; state.profile.choiceIds = ['c0', 'c1'];
   assert.throws(() => validateState(state), /24MB/);
 });
 test('音声設定がない旧データを読み込め、選んだ声と速さをバックアップに残せる', () => {
   const state = initialState();
   delete state.settings.speech;
   const migrated = validateState(state);
-  assert.deepEqual(migrated.settings.speech, { voiceURI: '', rate: 1 });
-  migrated.settings.speech = { voiceURI: 'ja-local-voice', rate: .85 };
+  assert.deepEqual(migrated.settings.speech, { voiceURI: '', rate: 1, pauses: true, onSelect: false });
+  migrated.settings.speech = { voiceURI: 'ja-local-voice', rate: .85, pauses: false, onSelect: true };
   assert.deepEqual(parseBackup(backupText(migrated)).settings.speech, migrated.settings.speech);
   migrated.settings.speech.rate = 100;
   assert.throws(() => validateState(migrated), /読み上げ/);

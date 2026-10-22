@@ -18,7 +18,7 @@ test('既定がクラウド音声でも、端末内の日本語音声を明示�
   assert.equal(s.spoken.length, 1);
   assert.equal(s.spoken[0].voice, local);
   assert.equal(s.spoken[0].lang, 'ja-JP');
-  assert.equal(s.spoken[0].text, 'ボールください。');
+  assert.equal(s.spoken[0].text, 'ボール、ください。');
   assert.equal(s.reader.reading, true);
   s.spoken[0].onend();
   assert.equal(s.reader.reading, false);
@@ -79,4 +79,13 @@ test('保存された声が別の端末になくてもクラウド音声を選�
   const s = setup([{ ...remote, voiceURI: 'remote' }, local]);
   s.reader.read(['ボール', 'ください'], { voiceURI: 'remote' });
   assert.equal(s.spoken[0].voice, local);
+});
+
+test('ことばの間をあける設定を切り替えても、順序と速さを保つ', () => {
+  const s = setup();
+  s.reader.read(['あかい', 'ボール', 'ください'], { pauses: true, rate: 1 });
+  assert.equal(s.spoken[0].text, 'あかい、ボール、ください。');
+  s.reader.read(['あかい', 'ボール', 'ください'], { pauses: false, rate: 1 });
+  assert.equal(s.spoken[1].text, 'あかいボールください。');
+  assert.equal(s.spoken[1].rate, 1);
 });

@@ -1,3 +1,4 @@
+import { cardLayout, printPages } from './cards.js';
 import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
 import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
@@ -24,14 +25,18 @@ let imageBusy = false;
 let editorToken = 0;
 let pendingRecord = null;
 let pendingReading = null;
+let printSelection = null;
+let printSize = 35;
 const reader = createReader({
   synth: window.speechSynthesis,
   Utterance: window.SpeechSynthesisUtterance,
   onState: (reading, result) => {
+    if (reading) { clearTimeout(noticeTimer); notice.textContent = ''; }
+    const manualReading = reading && Boolean(pendingReading);
     document.querySelectorAll('[data-action="speak"]').forEach(button => {
-      button.setAttribute('aria-pressed', String(reading));
-      button.setAttribute('aria-label', reading ? 'よみあげをとめる' : `${button.dataset.speechSubject || 'ぶん'}をよみあげる`);
-      button.querySelector('.speech-label').textContent = reading ? 'とめる' : 'よむ';
+      button.setAttribute('aria-pressed', String(manualReading));
+      button.setAttribute('aria-label', manualReading ? 'よみあげをとめる' : `${button.dataset.speechSubject || 'ぶん'}をよみあげる`);
+      button.querySelector('.speech-label').textContent = manualReading ? 'とめる' : 'よむ';
     });
     if (result === 'finished') {
       const record = pendingReading; pendingReading = null;
@@ -63,7 +68,7 @@ function voiceOptions(selected = state.settings.speech.voiceURI) {
   return '<option value="">端末の標準音声</option>' + voices.map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === selected ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
 }
 function speechSettingsForm() {
-  return `<form id="speech-form"><label>声の種類<select id="voice-select" name="voiceURI">${voiceOptions()}</select></label><label>話す速さ<select name="rate">${[[.85, 'ゆっくり'], [1, 'ふつう（おすすめ）'], [1.1, '少し速く']].map(([value, text]) => `<option value="${value}" ${state.settings.speech.rate === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label><div class="speech-setting-actions"><button type="button" class="secondary" data-action="preview-speech">ためしにきく</button><button type="button" class="quiet" data-action="stop-speech">とめる</button><button type="submit" class="primary">声の設定を保存</button></div><p class="hint">「ボールください」と読みます。カード間に区切りを入れず一文として読み上げます。選べる声や抑揚は端末によって異なります。</p></form>`;
+  return `<form id="speech-form"><label>声の種類<select id="voice-select" name="voiceURI">${voiceOptions()}</select></label><label>話す速さ<select name="rate">${[[.85, 'ゆっくり'], [1, 'ふつう（おすすめ）'], [1.1, '少し速く']].map(([value, text]) => `<option value="${value}" ${state.settings.speech.rate === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label><label class="check"><input type="checkbox" name="pauses" ${state.settings.speech.pauses ? 'checked' : ''}>ことばの間を少しあける</label><label class="check"><input type="checkbox" name="onSelect" ${state.settings.speech.onSelect ? 'checked' : ''}>カードを選んだら、すぐに名前を読む</label><div class="speech-setting-actions"><button type="button" class="secondary" data-action="preview-speech">ためしにきく</button><button type="button" class="quiet" data-action="stop-speech">とめる</button><button type="submit" class="primary">声の設定を保存</button></div><p class="hint">「間をあける」をオンにすると「ボール、ください」と読みます。選択時の名称読み上げと試聴は、学習記録の回数に含めません。選べる声や抑揚は端末によって異なります。</p></form>`;
 }
 
 function toast(text) {
@@ -79,12 +84,22 @@ function toast(text) {
 function image(card, large = false) {
   return card.image ? `<img class="card-image ${large ? 'large' : ''}" src="${esc(card.image)}" alt="">` : `<span class="card-emoji ${large ? 'large' : ''}" aria-hidden="true">${esc(card.emoji || '▧')}</span>`;
 }
+function face(card, showLabel = true) {
+  const layout = cardLayout(card.layout);
+  return `<span class="card-face text-${layout.textSize} label-${layout.position}">${image(card)}${showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</span>`;
+}
+function saySelection(label) {
+  if (!state.settings.speech.onSelect) return;
+  pendingReading = null;
+  try { reader.read([label], state.settings.speech); }
+  catch (error) { toast(error.message); }
+}
 function tag() { return `<span class="status ${onlineReady ? 'ready' : ''}">${onlineReady ? '● オフライン準備済み' : '○ オフライン準備中'}</span>`; }
 function header(student = false) {
   return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a>${student ? '<button class="quiet" data-action="teacher">先生用</button>' : tag()}</header>`;
 }
 function nav() {
-  return `<nav class="nav" aria-label="先生用メニュー">${[['home','学習の準備'],['cards','カード'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
+  return `<nav class="nav" aria-label="先生用メニュー">${[['home','学習の準備'],['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
 }
 function render() {
   if (!state) return;
@@ -93,17 +108,17 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.5.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.6.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
   return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、つたえる学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
-  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><p class="hint">カードを選び、「よむ」で相手につたえます。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
-  <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${image(card, true)}<strong>${esc(card.label)}</strong></div><p class="muted">大きなカードで、つたえよう。</p></section></div>
-  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1と、Phase 4の「ことば＋ください」を使えます。Phase 2・3は今後追加します。</p></div></section>`;
+  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="2" ${state.profile.phase === 2 ? 'selected' : ''}>Phase 2：自分からつたえる</option><option value="3" ${state.profile.phase === 3 ? 'selected' : ''}>Phase 3：複数からえらぶ</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1・2で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><fieldset class="choice-settings"><legend>Phase 3で並べるカード（2枚以上）</legend>${state.cards.map(c => `<label class="check"><input type="checkbox" name="choiceIds" value="${c.id}" ${state.profile.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><p class="hint">Phase 2では1枚のカードを使います。端末や相手との距離、場所を先生が調整してください。Phase 3では選んだカードだけを並べます。読み上げ回数は、各段階の達成を示すものではありません。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
+  <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${face(card)}</div><p class="muted">大きなカードで、つたえよう。</p></section></div>
+  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1〜4の画面を使えます。カードを選び、「よむ」でつたえます。</p></div></section>`;
 }
 function cardsView() {
-  return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${image(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
+  return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${face(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
 }
 function recordsView() {
   const today = new Date().toLocaleDateString('ja-JP');
@@ -115,7 +130,7 @@ function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
 }
 function settingsView() {
-  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。自動再生・効果音・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
+  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。カード選択時の読み上げは、下の音声設定で切り替えられます。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
 function prepareCardMotion(before, after) {
   const keys = value => [...value.cardIds.map(id => `item:${id}`), ...(value.ending ? ['ending:request'] : [])];
@@ -156,7 +171,7 @@ function sentenceStrip(editable = false) {
   const items = trial.cardIds.map(id => {
     const card = state.cards.find(c => c.id === id);
     const label = esc(card.label);
-    const content = `${image(card)}${state.settings.showLabel ? `<strong>${label}</strong>` : ''}`;
+    const content = face(card, state.settings.showLabel);
     return `<div class="sentence-unit">${editable ? `<button class="word-card" data-sentence-action="remove" data-card-id="${id}" data-motion-key="item:${id}" aria-label="${label}をブックにもどす">${content}</button>` : `<div class="word-card" role="img" aria-label="${label}">${content}</div>`}</div>`;
   }).join('');
   const endingContent = `<span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong>`;
@@ -169,13 +184,24 @@ function sentenceBoard(editable = false) {
   return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool undo-tool" data-sentence-action="undo" aria-label="ひとつもどす" ${canUndo ? '' : 'disabled'}><span class="undo-symbol" aria-hidden="true">↶</span><span>ひとつ<br>もどす</span></button></div></div>`;
 }
 function sentenceView() {
-  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
+  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
 }
 function studentView() {
   if (state.profile.phase === 4) return sentenceView();
+  if (state.profile.phase === 3) return discriminationView();
   const card = state.cards.find(c => c.id === (trial.cardId || state.profile.cardId));
   const selected = trial.stage === 'selected';
-  return `<main class="student"><p class="eyebrow">カードで つたえよう</p><h1>${selected ? 'よんで つたえよう' : 'カードを えらぼう'}</h1><div class="exchange-layout"><section class="book-space" aria-label="カードブック"><span class="space-label">カード</span>${selected ? '<div class="card-placeholder" aria-hidden="true"></div>' : `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをえらぶ">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</button>`}</section><span class="exchange-arrow" aria-hidden="true">→</span><section class="give-space" aria-label="えらんだカード"><span class="space-label">えらんだカード</span>${selected ? `<button class="student-card selected" data-action="reset" aria-label="${esc(card.label)}をブックにもどす">${image(card, true)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</button>` : '<div class="card-placeholder" aria-hidden="true"><span>＋</span></div>'}</section></div><button class="primary read-card-button" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span> <span class="speech-label">よむ</span></button></main>`;
+  return `<main class="student"><p class="eyebrow">カードで つたえよう</p><h1>${selected ? 'よんで つたえよう' : state.profile.phase === 2 ? 'じぶんから つたえよう' : 'カードを えらぼう'}</h1><div class="exchange-layout"><section class="book-space" aria-label="カードブック"><span class="space-label">カード</span>${selected ? '<div class="card-placeholder" aria-hidden="true"></div>' : `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをえらぶ">${face(card, state.settings.showLabel)}</button>`}</section><span class="exchange-arrow" aria-hidden="true">→</span><section class="give-space" aria-label="えらんだカード"><span class="space-label">えらんだカード</span>${selected ? `<button class="student-card selected" data-action="reset" aria-label="${esc(card.label)}をブックにもどす">${face(card, state.settings.showLabel)}</button>` : '<div class="card-placeholder" aria-hidden="true"><span>＋</span></div>'}</section></div><button class="primary read-card-button" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span> <span class="speech-label">よむ</span></button></main>`;
+}
+function discriminationView() {
+  const selected = state.cards.find(c => c.id === trial.cardId);
+  const choices = state.cards.filter(c => state.profile.choiceIds.includes(c.id));
+  return `<main class="student sentence-student"><p class="eyebrow">カードで つたえよう</p><h1>カードを えらぼう</h1><section class="sentence-book choice-book" aria-label="カードブック">${choices.map(c => `<button class="word-card" data-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}のカードをえらぶ" ${selected?.id === c.id ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}</section><section class="sentence-area" aria-label="えらんだカード"><h2>えらんだカード</h2><div class="sentence-board"><div class="sentence-strip"><div class="sentence-track">${selected ? `<button class="word-card" data-action="reset" aria-label="${esc(selected.label)}をブックにもどす">${face(selected, state.settings.showLabel)}</button>` : '<p class="hint">カードを えらぼう</p>'}</div></div><div class="strip-tools"><button class="strip-tool speak-tool" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span><span class="speech-label">よむ</span></button></div></div></section></main>`;
+}
+function printView() {
+  const selected = state.cards.filter(c => printSelection === null || printSelection.includes(c.id)).map(c => c.id);
+  const pages = printPages(state.cards, selected, printSize);
+  return `<section class="intro no-print"><div><p class="eyebrow">紙のカード</p><h1>A4に、いつものカードを。</h1><p class="muted">アプリと同じ写真・文字配置で印刷します。</p></div><button class="primary" data-action="print" ${pages.length ? '' : 'disabled'}>A4で印刷する</button></section><section class="panel no-print"><label>カードの大きさ<select id="print-size">${[[45,'大：4.5 × 4.5 cm'],[35,'中：3.5 × 3.5 cm'],[25,'小：2.5 × 2.5 cm']].map(([v,l]) => `<option value="${v}" ${printSize === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><fieldset><legend>印刷するカード</legend><div class="print-choices">${state.cards.map(c => `<label class="check"><input type="checkbox" data-print-card="${c.id}" ${selected.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</div></fieldset><p class="hint">A4・縦・倍率100%（実際のサイズ）・ヘッダーとフッターなしで印刷してください。印刷後に定規で寸法を確認してください。文字の上下と大きさは「カードを編集」で変更できます。</p><p>${selected.length}枚 ／ ${pages.length}ページ</p></section><div class="print-preview print-size-${printSize}">${pages.length ? pages.map((page, i) => `<section class="print-page columns-${page.columns}" aria-label="印刷 ${i+1}ページ">${page.cards.map(c => `<div class="paper-card">${face(c)}</div>`).join('')}</section>`).join('') : '<p class="no-print">印刷するカードを選んでください。</p>'}</div>`;
 }
 async function persist(next) {
   const clean = await writeState(next);
@@ -197,10 +223,19 @@ function closeDialog() { if (imageBusy) return toast('画像の準備を待っ�
 function cardEditor(id = null) {
   editedId = id;
   const card = id ? state.cards.find(c => c.id === id) : { label: '', emoji: '▧', category: 'そのほか', image: null };
+  const layout = cardLayout(card.layout);
   draftImage = card.image;
   editorToken++;
-  modal(id ? 'カードを編集' : 'カードをつくる', `<form id="card-form"><div id="image-preview" class="image-preview">${image(card)}</div><label class="file-picker">写真・イラストを選ぶ<input id="card-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label><button type="button" class="text-button" data-action="remove-image">画像を外す</button><p class="hint">写真は端末内で縮小し、位置情報などを除去します。JPEG・PNG・WebP・GIF、15MBまで。</p><label>カードに表示する文字<input name="label" maxlength="40" required value="${esc(card.label)}" autocomplete="off"></label><label>カテゴリ<input name="category" maxlength="30" required value="${esc(card.category)}" autocomplete="off"></label><label>画像がないときのマーク<input name="emoji" maxlength="16" value="${esc(card.emoji)}" autocomplete="off"></label><div class="modal-actions">${id ? `<button type="button" class="danger" data-action="delete-card" ${state.cards.length === 1 ? 'disabled' : ''}>削除</button>` : ''}<button type="submit" class="primary">カードを保存</button></div></form>`);
+  modal(id ? 'カードを編集' : 'カードをつくる', `<form id="card-form"><div id="image-preview" class="image-preview">${face(card)}</div><label class="file-picker">写真・イラストを選ぶ<input id="card-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label><button type="button" class="text-button" data-action="remove-image">画像を外す</button><p class="hint">写真は端末内で縮小し、位置情報などを除去します。JPEG・PNG・WebP・GIF、15MBまで。</p><label>カードに表示する文字<input name="label" maxlength="40" required value="${esc(card.label)}" autocomplete="off"></label><label>文字の位置<select name="position"><option value="top" ${layout.position === 'top' ? 'selected' : ''}>写真の上</option><option value="bottom" ${layout.position === 'bottom' ? 'selected' : ''}>写真の下</option></select></label><label>文字と写真のバランス<select name="textSize">${[['small','文字は小さく・写真を大きく'],['medium','標準'],['large','文字を大きく・写真は小さく']].map(([v,l]) => `<option value="${v}" ${layout.textSize === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><label>カテゴリ<input name="category" maxlength="30" required value="${esc(card.category)}" autocomplete="off"></label><label>画像がないときのマーク<input name="emoji" maxlength="16" value="${esc(card.emoji)}" autocomplete="off"></label><div class="modal-actions">${id ? `<button type="button" class="danger" data-action="delete-card" ${state.cards.length === 1 ? 'disabled' : ''}>削除</button>` : ''}<button type="submit" class="primary">カードを保存</button></div></form>`);
 }
+function updateCardPreview() {
+  const form = dialog.querySelector('#card-form');
+  if (!form) return;
+  const fields = new FormData(form);
+  const card = { label: fields.get('label') || 'カード', emoji: fields.get('emoji'), image: draftImage, layout: { position: fields.get('position'), textSize: fields.get('textSize') } };
+  dialog.querySelector('#image-preview').innerHTML = face(card);
+}
+dialog.addEventListener('input', updateCardPreview);
 async function resizeImage(file) {
   if (file.size > 15 * 1024 * 1024 || !['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) throw new Error('15MB以下のJPEG・PNG・WebP・GIFを選んでください。');
   const bitmap = await createImageBitmap(file);
@@ -266,6 +301,8 @@ document.addEventListener('click', event => {
       const next = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards);
       const animate = prepareCardMotion(trial, next);
       trial = next; render(); animate();
+      if (button.dataset.sentenceAction === 'select') saySelection(state.cards.find(c => c.id === button.dataset.cardId).label);
+      if (button.dataset.sentenceAction === 'ending' && trial.ending) saySelection(REQUEST);
     } catch (error) { toast(error.message); }
     return;
   }
@@ -292,7 +329,7 @@ document.addEventListener('click', event => {
   const action = button.dataset.action;
   if (!action) return;
   if (action === 'speak') {
-    if (reader.reading) { pendingReading = null; reader.stop(); return; }
+    if (reader.reading && pendingReading) { pendingReading = null; reader.stop(); return; }
     try {
       const record = readingRecord(state, trial, { id: uid(), at: now() });
       pendingReading = record;
@@ -302,9 +339,10 @@ document.addEventListener('click', event => {
   }
   if (action === 'preview-speech') {
     const fields = new FormData(document.querySelector('#speech-form'));
-    try { reader.read(['ボール', 'ください'], { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')) }); } catch (error) { toast(error.message); }
+    try { reader.read(['ボール', 'ください'], { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')), pauses: fields.has('pauses') }); } catch (error) { toast(error.message); }
     return;
   }
+  if (action === 'print') { run(async () => { await Promise.all([...document.querySelectorAll('.print-preview img')].map(img => img.decode())); window.print(); }); return; }
   if (action === 'stop-speech') return;
   if (action === 'close-dialog') return closeDialog();
   if (action === 'teacher') return teacherGate();
@@ -312,9 +350,9 @@ document.addEventListener('click', event => {
   if (action === 'new-card') return cardEditor();
   if (action === 'select' || action === 'reset') {
     if (pendingRecord) return recordDialog();
-    try { trial = state.profile.phase === 4 ? sentenceTransition(trial, action, null, state.cards) : transition(trial, action, state.profile.cardId); render(); } catch (error) { toast(error.message); } return;
+    try { trial = state.profile.phase === 4 ? sentenceTransition(trial, action, null, state.cards) : transition(action === 'select' ? newTrial() : trial, action, button.dataset.cardId || state.profile.cardId); render(); if (action === 'select') saySelection(state.cards.find(c => c.id === trial.cardId).label); } catch (error) { toast(error.message); } return;
   }
-  if (action === 'remove-image') { if (imageBusy) return; draftImage = null; dialog.querySelector('#image-preview').innerHTML = '<span class="card-emoji">▧</span>'; return; }
+  if (action === 'remove-image') { if (imageBusy) return; draftImage = null; updateCardPreview(); return; }
   run(async () => {
     if (action === 'delete-card') {
       if (imageBusy || state.cards.length === 1) return;
@@ -324,6 +362,8 @@ document.addEventListener('click', event => {
       if (state.cards.length === 1) return;
       const next = structuredClone(state);
       next.cards = next.cards.filter(c=>c.id!==editedId);
+      next.profile.choiceIds = next.profile.choiceIds.filter(id => id !== editedId);
+      if (next.profile.phase === 3 && next.profile.choiceIds.length < 2) next.profile.phase = 1;
       if (next.profile.cardId === editedId) next.profile.cardId = next.cards[0].id;
       await persist(next); closeDialog(); render(); toast('カードを削除しました。');
     } else if (action === 'backup') {
@@ -334,7 +374,7 @@ document.addEventListener('click', event => {
       await persist(next); render(); toast('書き出しました。「ファイル」で保存を確認してください。');
     } else if (action === 'restore-confirm') {
       if (!pendingRestore) return;
-      await persist(pendingRestore); trial = newTrial(); pendingRecord = null; unlocked = false;
+      await persist(pendingRestore); printSelection = null; trial = newTrial(); pendingRecord = null; unlocked = false;
       screen = state.settings.pin ? 'locked' : 'backup';
       closeDialog(); render(); toast('バックアップを復元しました。');
     } else if (action === 'csv') {
@@ -353,14 +393,14 @@ document.addEventListener('submit', event => {
   run(async () => {
     const next = structuredClone(state);
     if (form.id === 'learning-form') {
-      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')) };
+      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds') };
       await persist(next); unlocked = false; screen = 'student'; trial = state.profile.phase === 4 ? newSentenceTrial() : newTrial(); render();
     } else if (form.id === 'card-form') {
-      const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage };
+      const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage, layout: { position: fields.get('position'), textSize: fields.get('textSize') } };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);
       await persist(next); closeDialog(); render(); toast('カードを保存しました。');
     } else if (form.id === 'speech-form') {
-      next.settings.speech = { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')) };
+      next.settings.speech = { voiceURI: String(fields.get('voiceURI')), rate: Number(fields.get('rate')), pauses: fields.has('pauses'), onSelect: fields.has('onSelect') };
       reader.stop(); await persist(next); render(); toast('声の設定を保存しました。');
     } else if (form.id === 'display-form') {
       next.settings.showLabel = fields.has('showLabel'); await persist(next); render(); toast('表示設定を保存しました。');
@@ -380,15 +420,17 @@ document.addEventListener('submit', event => {
 });
 document.addEventListener('change', async event => {
   const input = event.target;
+  if (input.id === 'print-size') { printSize = Number(input.value); render(); return; }
+  if (input.dataset.printCard) { const selected = new Set(printSelection ?? state.cards.map(c => c.id)); if (input.checked) selected.add(input.dataset.printCard); else selected.delete(input.dataset.printCard); printSelection = [...selected]; render(); return; }
   if (input.name === 'cardId' && screen === 'home') {
     const card = state.cards.find(c => c.id === input.value);
-    if (card) document.querySelector('.sample-card').innerHTML = `${image(card, true)}<strong>${esc(card.label)}</strong>`;
+    if (card) document.querySelector('.sample-card').innerHTML = face(card);
   } else if (input.id === 'card-image') {
     const file = input.files?.[0]; if (!file) return;
     imageBusy = true;
     const token = editorToken;
     const submit = dialog.querySelector('[type="submit"]'); submit.disabled = true;
-    try { const data = await resizeImage(file); if (token === editorToken) { draftImage = data; dialog.querySelector('#image-preview').innerHTML = `<img src="${data}" class="card-image" alt="選択した画像">`; } }
+    try { const data = await resizeImage(file); if (token === editorToken) { draftImage = data; updateCardPreview(); } }
     catch(error) { toast(error.message || '画像を読み込めませんでした。'); }
     finally { imageBusy = false; submit.disabled = false; input.value = ''; }
   } else if (input.id === 'restore-file') {
