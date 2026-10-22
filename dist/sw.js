@@ -1,4 +1,4 @@
-const CACHE = 'ptp-v2-shell-0.3.1-natural-speech';
+const CACHE = 'ptp-v2-shell-0.4.0-tap-undo';
 const ROOT = new URL('./', self.location).href;
 const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
 self.addEventListener('install', event => {

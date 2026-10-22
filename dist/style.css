@@ -35,8 +35,11 @@
 .strip-tool svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .strip-tool[aria-pressed="true"] { background: #442707; }
 .strip-tool:focus-visible { outline-color: #fff; }
-.cancel-symbol { display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid currentColor; border-radius: 50%; font-size: 30px; font-weight: 400; line-height: 1; }
-.sentence-area .word-controls .quiet, .sentence-area .ending > .quiet { background: #fff1d5; color: #57310c; }
+.speak-tool { min-height: 104px; }
+.speak-tool svg { width: 42px; height: 42px; }
+.undo-tool { min-height: 72px; background: #f4bd67; border-color: #b97727; color: #52300b; font-size: 11px; line-height: 1.35; }
+.undo-symbol { font-size: 32px; line-height: 1; }
+.moving-card { position: fixed; z-index: 1000; pointer-events: none; margin: 0; min-height: 0; max-width: none; transform-origin: top left; box-shadow: 0 6px 18px #342a2440; }
 .sentence-track {
   position: relative;
   isolation: isolate;
@@ -71,8 +74,6 @@
 .sentence-unit { flex: 0 0 150px; }
 .sentence-unit .word-card { width: 150px; }
 .sentence-unit.ending .word-card { border-color: #a36c28; background: #fff2d7; }
-.word-controls { display: flex; gap: 3px; margin-top: 6px; }
-.word-controls button { flex: 1; padding: 8px; }
 .ending-placeholder { flex: 0 0 150px; min-height: 150px; border: 2px dashed #aa9271; border-radius: 10px; display: grid; place-items: center; color: #735e43; }
 .sentence-text { font-size: 24px; overflow-wrap: anywhere; margin-top: 24px; }
 .sentence-partner .sentence-board { background: #e99522; border: 2px solid #b66b13; border-radius: 20px; padding: 24px; }

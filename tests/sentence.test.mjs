@@ -61,3 +61,44 @@ test('日本語の文をバックアップとCSVに保持し、語順違いの�
   state.records[0].sentence.reverse();
   assert.throws(() => validateState(state), /最後/);
 });
+test('誤って戻したカードを、元の位置と日本語の語順で復元できる', () => {
+  let t = step(newSentenceTrial(), 'select', 'red');
+  t = step(t, 'select', 'ball'); t = step(t, 'ending');
+  const before = t;
+  t = step(t, 'remove', 'red');
+  assert.deepEqual(sentenceWords(t, cards), ['ボール', 'ください']);
+  t = step(t, 'undo');
+  assert.deepEqual(t, before);
+  assert.deepEqual(sentenceWords(t, cards), ['あかい', 'ボール', 'ください']);
+});
+test('追加・要求表現を1操作ずつ戻せ、空の帯でも壊れない', () => {
+  let t = step(newSentenceTrial(), 'select', 'ball');
+  t = step(t, 'ending');
+  t = step(t, 'undo');
+  assert.deepEqual(sentenceWords(t, cards), ['ボール']);
+  assert.equal(t.stage, 'choose');
+  t = step(t, 'undo');
+  assert.deepEqual(t, newSentenceTrial());
+  assert.deepEqual(step(t, 'undo'), t);
+});
+test('提示を戻すと編集中の同じ文に戻り、受け取り済みの交換は取り消さない', () => {
+  let t = step(newSentenceTrial(), 'select', 'ball');
+  t = step(t, 'ending');
+  const complete = t;
+  t = step(t, 'give');
+  assert.deepEqual(step(t, 'undo'), complete);
+  t = step(t, 'receive');
+  assert.throws(() => step(t, 'undo'), /受け取った/);
+});
+test('無効な操作を履歴に入れず、長時間の利用でも履歴数を制限する', () => {
+  let t = step(newSentenceTrial(), 'select', 'ball');
+  const before = t;
+  t = step(t, 'select', 'ball');
+  assert.equal(t.history.length, before.history.length);
+  t = step(t, 'remove', 'missing');
+  assert.equal(t.history.length, before.history.length);
+  for (let i = 0; i < 120; i++) t = step(t, 'ending');
+  assert.equal(t.history.length, 100);
+  assert.deepEqual(before.cardIds, ['ball']);
+  assert.equal(before.ending, false);
+});

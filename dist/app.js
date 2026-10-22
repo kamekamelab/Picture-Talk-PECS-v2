@@ -85,7 +85,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.3.1 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.4.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
@@ -109,23 +109,61 @@ function backupView() {
 function settingsView() {
   return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。自動再生・効果音・点滅する演出はありません。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
+function prepareCardMotion(before, after) {
+  const keys = value => [...value.cardIds.map(id => `item:${id}`), ...(value.ending ? ['ending:request'] : [])];
+  const previous = keys(before), current = keys(after);
+  const removed = previous.find(key => !current.includes(key));
+  const added = current.find(key => !previous.includes(key));
+  const key = removed || added;
+  if (!key) return () => {};
+  const find = container => [...document.querySelectorAll(`${container} [data-motion-key]`)].find(el => el.dataset.motionKey === key);
+  const source = find(removed ? '.sentence-track' : '.sentence-book');
+  const from = source?.getBoundingClientRect();
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ghost = source && !reduced ? source.cloneNode(true) : null;
+  if (ghost) {
+    const style = getComputedStyle(source);
+    ghost.classList.add('moving-card');
+    ghost.disabled = false;
+    ghost.inert = true;
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.tabIndex = -1;
+    Object.assign(ghost.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`, backgroundColor: style.backgroundColor, borderColor: style.borderColor });
+    document.body.append(ghost);
+  }
+  return () => {
+    const destination = find(removed ? '.sentence-book' : '.sentence-track');
+    destination?.focus({ preventScroll: true });
+    if (!ghost) return;
+    const to = destination?.getBoundingClientRect();
+    if (!to || !ghost.animate || to.bottom < 0 || to.top > innerHeight || to.right < 0 || to.left > innerWidth) { ghost.remove(); return; }
+    const animation = ghost.animate([
+      { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+      { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`, opacity: .35 }
+    ], { duration: 240, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+    animation.finished.then(() => ghost.remove(), () => ghost.remove());
+  };
+}
 function sentenceStrip(editable = false) {
-  const items = trial.cardIds.map((id, index) => {
+  const items = trial.cardIds.map(id => {
     const card = state.cards.find(c => c.id === id);
-    return `<div class="sentence-unit"><div class="word-card" role="img" aria-label="${esc(card.label)}">${image(card)}${state.settings.showLabel ? `<strong>${esc(card.label)}</strong>` : ''}</div>${editable ? `<div class="word-controls"><button class="quiet" data-sentence-action="left" data-card-id="${id}" aria-label="${esc(card.label)}を左へ" ${index === 0 ? 'disabled' : ''}>←</button><button class="quiet" data-sentence-action="remove" data-card-id="${id}" aria-label="${esc(card.label)}を外す">×</button><button class="quiet" data-sentence-action="right" data-card-id="${id}" aria-label="${esc(card.label)}を右へ" ${index === trial.cardIds.length - 1 ? 'disabled' : ''}>→</button></div>` : ''}</div>`;
+    const label = esc(card.label);
+    const content = `${image(card)}${state.settings.showLabel ? `<strong>${label}</strong>` : ''}`;
+    return `<div class="sentence-unit">${editable ? `<button class="word-card" data-sentence-action="remove" data-card-id="${id}" data-motion-key="item:${id}" aria-label="${label}をブックにもどす">${content}</button>` : `<div class="word-card" role="img" aria-label="${label}">${content}</div>`}</div>`;
   }).join('');
-  const ending = trial.ending ? `<div class="sentence-unit ending"><div class="word-card"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></div>${editable ? '<button class="quiet" data-sentence-action="ending" aria-label="くださいを外す">×</button>' : ''}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
+  const endingContent = `<span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong>`;
+  const ending = trial.ending ? `<div class="sentence-unit ending">${editable ? `<button class="word-card" data-sentence-action="ending" data-motion-key="ending:request" aria-label="くださいをブックにもどす">${endingContent}</button>` : `<div class="word-card">${endingContent}</div>`}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
   return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
 }
 function sentenceBoard(editable = false) {
   const complete = ['selected', 'partner'].includes(trial.stage);
-  const hasCards = trial.cardIds.length > 0 || trial.ending;
-  return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool clear-tool" data-action="reset" aria-label="ぶんをとりけす" ${hasCards ? '' : 'disabled'}><span class="cancel-symbol" aria-hidden="true">×</span><span>とりけす</span></button></div></div>`;
+  const canUndo = Boolean(trial.history?.length);
+  return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool undo-tool" data-sentence-action="undo" aria-label="ひとつもどす" ${canUndo ? '' : 'disabled'}><span class="undo-symbol" aria-hidden="true">↶</span><span>ひとつ<br>もどす</span></button></div></div>`;
 }
 function sentenceView() {
   if (trial.stage === 'received') return `<main class="student success"><span class="success-mark" aria-hidden="true">✓</span><h1>つたわった！</h1><p>ぶんを わたせたね</p><button class="primary receive" data-action="reset">もういちど</button></main>`;
-  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceBoard()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button><button class="text-button" data-action="reset">もどる</button></main>`;
-  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" aria-pressed="${trial.ending}"><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button></main>`;
+  if (trial.stage === 'partner') return `<main class="student sentence-partner"><p class="eyebrow">あいてに みせよう</p><h1>これを つたえたい</h1>${sentenceBoard()}<p class="sentence-text">${esc(sentenceWords(trial, state.cards).join(' '))}</p><button class="primary receive" data-action="receive">うけとった <span class="small">あいてのひとが おします</span></button></main>`;
+  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${image(c)}${state.settings.showLabel ? `<strong>${esc(c.label)}</strong>` : ''}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section><button class="primary give-button" data-action="give" ${trial.stage !== 'selected' ? 'disabled' : ''}>ぶんを わたす</button></main>`;
 }
 function studentView() {
   if (state.profile.phase === 4) return sentenceView();
@@ -220,7 +258,11 @@ document.addEventListener('click', event => {
   if (button.dataset.action !== 'speak') reader.stop();
   if (button.tagName === 'A') event.preventDefault();
   if (button.dataset.sentenceAction) {
-    try { trial = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards); render(); } catch (error) { toast(error.message); }
+    try {
+      const next = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards);
+      const animate = prepareCardMotion(trial, next);
+      trial = next; render(); animate();
+    } catch (error) { toast(error.message); }
     return;
   }
   if (button.dataset.recordId) {
