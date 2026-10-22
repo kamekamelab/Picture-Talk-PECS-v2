@@ -1,7 +1,7 @@
 import { cardLayout, printPages } from './cards.js';
 import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
-import { REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
+import { COMMENTS, commentEndings, endingWord, REQUEST, newSentenceTrial, sentenceWords, sentenceTransition } from './sentence.js';
 import { createReader, localJapaneseVoice, localJapaneseVoices } from './speech.js';
 
 const app = document.querySelector('#app');
@@ -108,14 +108,14 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.6.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.7.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function homeView() {
   const card = state.cards.find(c => c.id === state.profile.cardId);
   return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、つたえる学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
-  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="2" ${state.profile.phase === 2 ? 'selected' : ''}>Phase 2：自分からつたえる</option><option value="3" ${state.profile.phase === 3 ? 'selected' : ''}>Phase 3：複数からえらぶ</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option></select></label><label>Phase 1・2で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><fieldset class="choice-settings"><legend>Phase 3で並べるカード（2枚以上）</legend>${state.cards.map(c => `<label class="check"><input type="checkbox" name="choiceIds" value="${c.id}" ${state.profile.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><p class="hint">Phase 2では1枚のカードを使います。端末や相手との距離、場所を先生が調整してください。Phase 3では選んだカードだけを並べます。読み上げ回数は、各段階の達成を示すものではありません。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
+  <div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="2" ${state.profile.phase === 2 ? 'selected' : ''}>Phase 2：自分からつたえる</option><option value="3" ${state.profile.phase === 3 ? 'selected' : ''}>Phase 3：複数からえらぶ</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：日本語の文をつくる</option><option value="5" ${state.profile.phase === 5 ? 'selected' : ''}>Phase 5：質問に答えて要求する</option><option value="6" ${state.profile.phase === 6 ? 'selected' : ''}>Phase 6：コメントする</option></select></label><label>Phase 1・2で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><fieldset class="choice-settings"><legend>Phase 3で並べるカード（2枚以上）</legend>${state.cards.map(c => `<label class="check"><input type="checkbox" name="choiceIds" value="${c.id}" ${state.profile.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><label>Phase 6の学習方法<select name="commentMode">${[['spontaneous','自分からコメント（質問なし）'],['see','質問に答える：なにがみえますか？'],['hear','質問に答える：なにがきこえますか？'],['have','質問に答える：なにをもっていますか？']].map(([v,l]) => `<option value="${v}" ${state.profile.commentMode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="hint">Phase 5では先生が「なにがほしいですか？」と問いかけます。Phase 6では質問への応答と、質問なしのコメントを切り替えられます。</p><p class="hint">Phase 2では1枚のカードを使います。端末や相手との距離、場所を先生が調整してください。Phase 3では選んだカードだけを並べます。読み上げ回数は、各段階の達成を示すものではありません。</p><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
   <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${face(card)}</div><p class="muted">大きなカードで、つたえよう。</p></section></div>
-  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1〜4の画面を使えます。カードを選び、「よむ」でつたえます。</p></div></section>`;
+  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1〜6の画面を使えます。カードを選び、「よむ」でつたえます。</p></div></section>`;
 }
 function cardsView() {
   return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${face(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
@@ -124,7 +124,7 @@ function recordsView() {
   const today = new Date().toLocaleDateString('ja-JP');
   const records = state.records.filter(r => r.kind === 'read' && new Date(r.at).toLocaleDateString('ja-JP') === today);
   const names = { independent: '自分から', assisted: '支援あり', unrated: '未評価' };
-  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>つたえる学習を、残す。</h1><p class="muted">最後まで読み上げた回数を保存します。過去の交換記録とは区別しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の読み上げ',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード・文</th><th>Phase</th><th>種別</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>${r.phase}</td><td>${r.kind === 'read' ? '読み上げ' : '過去の交換'}</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードや文を最後まで読み上げると、ここに残ります。</p></div>'}</section>`;
+  return `<section class="intro"><div><p class="eyebrow">学習記録</p><h1>つたえる学習を、残す。</h1><p class="muted">最後まで読み上げた回数を保存します。過去の交換記録とは区別しています。</p></div><button class="secondary" data-action="csv" ${state.records.length ? '' : 'disabled'}>CSVを書き出す</button></section><div class="stats">${[['今日の読み上げ',records.length],['自分から',records.filter(r=>r.support==='independent').length],['支援あり',records.filter(r=>r.support==='assisted').length],['未評価',records.filter(r=>r.support==='unrated').length]].map(([label,n])=>`<div><span>${label}</span><strong>${n}<small> 回</small></strong></div>`).join('')}</div><section class="panel"><h2>これまでの記録 <span class="subtle">${state.records.length}件</span></h2>${state.records.length ? `<div class="table-wrap"><table><thead><tr><th>日時</th><th>呼び名</th><th>カード・文</th><th>Phase</th><th>種別</th><th>きっかけ</th><th>様子（押すと変更）</th></tr></thead><tbody>${state.records.slice(-200).reverse().map(r=>`<tr><td>${dateLabel(r.at)}</td><td>${esc(r.alias)}</td><td>${esc(r.label)}</td><td>${r.phase}</td><td>${r.kind === 'read' ? '読み上げ' : '過去の交換'}</td><td>${esc(r.context || '—')}</td><td><button class="quiet" data-record-id="${r.id}">${names[r.support]}</button></td></tr>`).join('')}</tbody></table></div><p class="subtle">画面には直近200件を表示します。CSVとバックアップには全件を含みます。</p>` : '<div class="empty"><span aria-hidden="true">▤</span><p>記録はまだありません。</p><p class="muted">カードや文を最後まで読み上げると、ここに残ります。</p></div>'}</section>`;
 }
 function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
@@ -174,8 +174,10 @@ function sentenceStrip(editable = false) {
     const content = face(card, state.settings.showLabel);
     return `<div class="sentence-unit">${editable ? `<button class="word-card" data-sentence-action="remove" data-card-id="${id}" data-motion-key="item:${id}" aria-label="${label}をブックにもどす">${content}</button>` : `<div class="word-card" role="img" aria-label="${label}">${content}</div>`}</div>`;
   }).join('');
-  const endingContent = `<span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong>`;
-  const ending = trial.ending ? `<div class="sentence-unit ending">${editable ? `<button class="word-card" data-sentence-action="ending" data-motion-key="ending:request" aria-label="くださいをブックにもどす">${endingContent}</button>` : `<div class="word-card">${endingContent}</div>`}</div>` : (editable ? '<div class="ending-placeholder">ください</div>' : '');
+  const endingLabel = endingWord(trial);
+  const endingEmoji = Object.values(COMMENTS).find(c => c.label === endingLabel)?.emoji || '🤲';
+  const endingContent = `<span class="card-emoji" aria-hidden="true">${endingEmoji}</span><strong>${endingLabel === 'をもっています' ? 'をもって<br>います' : esc(endingLabel)}</strong>`;
+  const ending = trial.ending ? `<div class="sentence-unit ending">${editable ? `<button class="word-card" data-sentence-action="ending" data-motion-key="ending:request" aria-label="${esc(endingLabel)}をブックにもどす">${endingContent}</button>` : `<div class="word-card">${endingContent}</div>`}</div>` : (editable ? `<div class="ending-placeholder">${state.profile.phase === 6 ? 'つたえることば' : REQUEST}</div>` : '');
   return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
 }
 function sentenceBoard(editable = false) {
@@ -184,10 +186,15 @@ function sentenceBoard(editable = false) {
   return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool undo-tool" data-sentence-action="undo" aria-label="ひとつもどす" ${canUndo ? '' : 'disabled'}><span class="undo-symbol" aria-hidden="true">↶</span><span>ひとつ<br>もどす</span></button></div></div>`;
 }
 function sentenceView() {
-  return `<main class="student sentence-student"><p class="eyebrow">ことばを ならべよう</p><h1>ぶんを つくろう</h1><section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => c.label.trim() !== REQUEST).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button></section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
+  const phase = state.profile.phase;
+  const comment = phase === 6;
+  const mode = state.profile.commentMode;
+  const question = phase === 5 ? 'なにが ほしいですか？' : comment && mode !== 'spontaneous' ? COMMENTS[mode].question : '';
+  const endings = comment ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([key, c]) => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('') : `<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button>`;
+  return `<main class="student sentence-student"><p class="eyebrow">${comment ? 'みつけたことを つたえよう' : 'ことばを ならべよう'}</p><h1>${comment ? 'つたえよう' : 'ぶんを つくろう'}</h1>${question ? `<p class="question-card">${question}</p>` : ''}<section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim())).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}${endings}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
 }
 function studentView() {
-  if (state.profile.phase === 4) return sentenceView();
+  if (state.profile.phase >= 4) return sentenceView();
   if (state.profile.phase === 3) return discriminationView();
   const card = state.cards.find(c => c.id === (trial.cardId || state.profile.cardId));
   const selected = trial.stage === 'selected';
@@ -298,11 +305,12 @@ document.addEventListener('click', event => {
   if (button.tagName === 'A') event.preventDefault();
   if (button.dataset.sentenceAction) {
     try {
-      const next = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.cardId, state.cards);
+      const next = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.expression || button.dataset.cardId, state.cards);
       const animate = prepareCardMotion(trial, next);
       trial = next; render(); animate();
       if (button.dataset.sentenceAction === 'select') saySelection(state.cards.find(c => c.id === button.dataset.cardId).label);
-      if (button.dataset.sentenceAction === 'ending' && trial.ending) saySelection(REQUEST);
+      if (button.dataset.sentenceAction === 'ending' && trial.ending) saySelection(endingWord(trial));
+      if (button.dataset.sentenceAction === 'expression') saySelection(trial.expression);
     } catch (error) { toast(error.message); }
     return;
   }
@@ -350,7 +358,7 @@ document.addEventListener('click', event => {
   if (action === 'new-card') return cardEditor();
   if (action === 'select' || action === 'reset') {
     if (pendingRecord) return recordDialog();
-    try { trial = state.profile.phase === 4 ? sentenceTransition(trial, action, null, state.cards) : transition(action === 'select' ? newTrial() : trial, action, button.dataset.cardId || state.profile.cardId); render(); if (action === 'select') saySelection(state.cards.find(c => c.id === trial.cardId).label); } catch (error) { toast(error.message); } return;
+    try { trial = state.profile.phase >= 4 ? sentenceTransition(trial, action, null, state.cards) : transition(action === 'select' ? newTrial() : trial, action, button.dataset.cardId || state.profile.cardId); render(); if (action === 'select') saySelection(state.cards.find(c => c.id === trial.cardId).label); } catch (error) { toast(error.message); } return;
   }
   if (action === 'remove-image') { if (imageBusy) return; draftImage = null; updateCardPreview(); return; }
   run(async () => {
@@ -393,8 +401,8 @@ document.addEventListener('submit', event => {
   run(async () => {
     const next = structuredClone(state);
     if (form.id === 'learning-form') {
-      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds') };
-      await persist(next); unlocked = false; screen = 'student'; trial = state.profile.phase === 4 ? newSentenceTrial() : newTrial(); render();
+      next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds'), commentMode: fields.get('commentMode') };
+      await persist(next); unlocked = false; screen = 'student'; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
     } else if (form.id === 'card-form') {
       const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage, layout: { position: fields.get('position'), textSize: fields.get('textSize') } };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);
