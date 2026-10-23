@@ -15,7 +15,7 @@ test('ふだん使いは属性語・物・文末の日本語順を保ち、フ�
  assert.deepEqual(sentenceWords(t,s.cards),['おおきい','ボール','ください']);
  const record=readingRecord(s,t,meta); assert.equal(record.phase,0);
  assert.equal(record.support,'unrated'); s.records=[record];
- assert.deepEqual(parseBackup(backupText(s)),s);
+ assert.deepEqual(parseBackup(backupText(s)),validateState(s));
  assert.ok(csv(s.records).includes('ふだん使い'));
 });
 test('ふだん使いで要求とコメントを切り替え、取消で元の文に戻せる',()=>{
@@ -34,7 +34,7 @@ test('ふだん使いで要求とコメントを切り替え、取消で元の�
 test('旧v5を練習モードとして移行し、以前のフェイズとカードを保持する',()=>{
  const s=initialState();s.schemaVersion=5;delete s.profile.mode;s.profile.phase=3;
  const clean=validateState(s);
- assert.equal(clean.schemaVersion,6);assert.equal(clean.profile.mode,'learning');assert.equal(clean.profile.phase,3);
+ assert.equal(clean.schemaVersion,7);assert.equal(clean.profile.mode,'learning');assert.equal(clean.profile.phase,3);
  assert.deepEqual(clean.cards,s.cards);
  s.profile.mode='external';assert.throws(()=>validateState(s));
 });

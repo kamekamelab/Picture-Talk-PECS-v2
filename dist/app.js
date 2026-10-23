@@ -1,3 +1,4 @@
+import { moveBookCard, resizeBook } from './book.js';
 import { cardLayout, printPages } from './cards.js';
 import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
@@ -28,6 +29,10 @@ let pendingReading = null;
 let printSelection = null;
 let printSize = 35;
 let dailyCategory = null;
+let bookEditing = false;
+let pickedCard = null;
+let pointerDrag = null;
+let suppressClickUntil = 0;
 const reader = createReader({
   synth: window.speechSynthesis,
   Utterance: window.SpeechSynthesisUtterance,
@@ -83,7 +88,7 @@ function toast(text) {
   noticeTimer = setTimeout(() => { notice.textContent = ''; }, 6500);
 }
 function image(card, large = false) {
-  return card.image ? `<img class="card-image ${large ? 'large' : ''}" src="${esc(card.image)}" alt="">` : `<span class="card-emoji ${large ? 'large' : ''}" aria-hidden="true">${esc(card.emoji || '▧')}</span>`;
+  return card.image ? `<img draggable="false" class="card-image ${large ? 'large' : ''}" src="${esc(card.image)}" alt="">` : `<span class="card-emoji ${large ? 'large' : ''}" aria-hidden="true">${esc(card.emoji || '▧')}</span>`;
 }
 function face(card, showLabel = true) {
   const layout = cardLayout(card.layout);
@@ -109,7 +114,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.9.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function isDaily() { return state.profile.mode === 'daily'; }
 function usesSentence() { return isDaily() || state.profile.phase >= 4; }
@@ -190,15 +195,17 @@ function sentenceView() {
   const comment = phase === 6;
   const mode = state.profile.commentMode;
   const question = phase === 5 ? 'なにが ほしいですか？' : comment && mode !== 'spontaneous' ? COMMENTS[mode].question : '';
-  const endings = comment ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([key, c]) => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('') : `<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button>`;
+  const endings = comment ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([key, c]) => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('') : `<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button>`;
   return `<main class="student sentence-student"><p class="eyebrow">${comment ? 'みつけたことを つたえよう' : 'ことばを ならべよう'}</p><h1>${comment ? 'つたえよう' : 'ぶんを つくろう'}</h1>${question ? `<p class="question-card">${question}</p>` : ''}<section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim())).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}${endings}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
 }
 function dailyView() {
   const categories = [...new Set(state.cards.map(c => c.category))];
   if (dailyCategory !== null && !categories.includes(dailyCategory)) dailyCategory = null;
   const cards = state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim()) && (dailyCategory === null || c.category === dailyCategory));
+  const book = state.settings.book;
+  const rails = book.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
   const endings = [{ label: REQUEST, emoji: '🤲' }, ...Object.values(COMMENTS)];
-  return `<main class="student daily-student"><p class="eyebrow">いつもの カードブック</p><h1>カードで つたえよう</h1><div class="daily-binder"><section class="daily-book" aria-label="カードブック">${cards.map(c => `<div class="daily-rail"><button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button></div>`).join('') || '<p class="hint">このページのカードはありません。</p>'}</section><nav class="category-tabs" aria-label="カードのカテゴリ"><button data-category="" aria-pressed="${dailyCategory === null}">ぜんぶ</button>${categories.map(c => `<button data-category="${esc(c)}" aria-pressed="${dailyCategory === c}">${esc(c)}</button>`).join('')}</nav><section class="daily-endings" aria-label="つたえることば">${endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></div></main>`;
+  return `<main class="student daily-student"><p class="eyebrow">いつもの カードブック</p><h1>カードで つたえよう</h1><div class="book-edit-toolbar">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : `<span>マジックテープ ${book.rails}本</span><button class="secondary" data-action="edit-book">配置を編集</button>`}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="category-tabs" aria-label="カードのカテゴリ"><button data-category="" aria-pressed="${dailyCategory === null}">ぜんぶ</button>${categories.map(c => `<button data-category="${esc(c)}" aria-pressed="${dailyCategory === c}">${esc(c)}</button>`).join('')}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${bookEditing ? '<p>カードの配置を編集中です。</p>' : sentenceBoard(true)}</section></div></main>`;
 }
 function sizeCardImage(radius) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 200;
@@ -315,6 +322,9 @@ function recordDialog() {
 document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
+  if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
+  if (button.dataset.pickCard) { pickedCard = button.dataset.pickCard; render(); return; }
+  if (button.dataset.placeRail !== undefined) { saveCardPosition(pickedCard,Number(button.dataset.placeRail)); return; }
   if (button.dataset.action !== 'speak') { pendingReading = null; reader.stop(); }
   if (button.tagName === 'A') event.preventDefault();
   if (button.dataset.sentenceAction) {
@@ -368,7 +378,8 @@ document.addEventListener('click', event => {
   if (action === 'print') { run(async () => { await Promise.all([...document.querySelectorAll('.print-preview img')].map(img => img.decode())); window.print(); }); return; }
   if (action === 'stop-speech') return;
   if (action === 'close-dialog') return closeDialog();
-  if (action === 'teacher') return teacherGate();
+  if (action === 'teacher') { bookEditing = false; pickedCard = null; return teacherGate(); }
+  if (action === 'edit-book' || action === 'finish-book-edit') { bookEditing = action === 'edit-book'; pickedCard = null; render(); return; }
   if (action === 'home') { screen = 'settings'; render(); return; }
   if (action === 'new-card') return cardEditor();
   if (action === 'select' || action === 'reset') {
@@ -379,7 +390,7 @@ document.addEventListener('click', event => {
   run(async () => {
     if (action === 'start-daily') {
       const next = structuredClone(state); next.profile.mode = 'daily'; await persist(next);
-      dailyCategory = null; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
+      bookEditing = false; pickedCard = null; dailyCategory = null; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
     } else if (action === 'add-size-cards') {
       const next = structuredClone(state);
       for (const [label, radius] of [['おおきい',72], ['ちいさい',28]]) {
@@ -452,6 +463,7 @@ document.addEventListener('submit', event => {
 });
 document.addEventListener('change', async event => {
   const input = event.target;
+  if (input.id === 'rail-count') { run(async () => { const next = structuredClone(state); next.settings.book = resizeBook(next.settings.book,Number(input.value)); await persist(next); render(); }); return; }
   if (input.id === 'print-size') { printSize = Number(input.value); render(); return; }
   if (input.dataset.printCard) { const selected = new Set(printSelection ?? state.cards.map(c => c.id)); if (input.checked) selected.add(input.dataset.printCard); else selected.delete(input.dataset.printCard); printSelection = [...selected]; render(); return; }
   if (input.id === 'card-image') {
@@ -513,3 +525,69 @@ if (navigator.locks) {
 } else {
   app.innerHTML = '<main class="loading"><h1>このブラウザーでは利用できません</h1><p>新しいSafariまたはChromeで開いてください。複数画面からのデータ上書きを防ぐ機能が必要です。</p></main>';
 }
+
+function saveCardPosition(id, rail, before = null) {
+  if (!bookEditing || !id) return;
+  run(async () => {
+    const next = structuredClone(state);
+    next.settings.book = moveBookCard(next.settings.book,id,rail,before);
+    await persist(next); pickedCard = null; render();
+  });
+}
+function clearPointerDrag() {
+  const drag = pointerDrag; pointerDrag = null;
+  drag?.ghost?.remove();
+  document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+  if (drag?.source.hasPointerCapture?.(drag.pointerId)) drag.source.releasePointerCapture(drag.pointerId);
+  return drag;
+}
+document.addEventListener('pointerdown', event => {
+  if (!state || busy || !isDaily() || screen !== 'student' || event.button !== 0) return;
+  const source = event.target.closest('[data-drag-card], [data-drag-expression]');
+  if (!source || source.disabled || (bookEditing && !source.dataset.dragCard)) return;
+  pointerDrag = {source,pointerId:event.pointerId,x:event.clientX,y:event.clientY,editing:bookEditing};
+  source.setPointerCapture(event.pointerId);
+});
+document.addEventListener('pointermove', event => {
+  const drag = pointerDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  if (!drag.ghost && Math.hypot(event.clientX-drag.x,event.clientY-drag.y) < 10) return;
+  event.preventDefault();
+  if (event.clientY > innerHeight-48) window.scrollBy(0,18);
+  else if (event.clientY < 48) window.scrollBy(0,-18);
+  if (drag.editing) {
+    const book = document.querySelector('.daily-book'), box = book.getBoundingClientRect();
+    if (event.clientX > box.right-30) book.scrollBy(16,0);
+    else if (event.clientX < box.left+30) book.scrollBy(-16,0);
+  }
+  if (!drag.ghost) {
+    pendingReading = null; reader.stop();
+    const box = drag.source.getBoundingClientRect();
+    drag.ghost = drag.source.cloneNode(true); drag.ghost.inert = true;
+    drag.ghost.setAttribute('aria-hidden','true'); drag.ghost.classList.add('drag-ghost');
+    Object.assign(drag.ghost.style,{width:`${box.width}px`,height:`${box.height}px`});
+    document.body.append(drag.ghost);
+  }
+  Object.assign(drag.ghost.style,{left:`${event.clientX-40}px`,top:`${event.clientY-40}px`});
+  document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+  const target = document.elementFromPoint(event.clientX,event.clientY);
+  (drag.editing ? target?.closest('[data-rail]') : target?.closest('.sentence-area'))?.classList.add('drop-target');
+},{passive:false});
+document.addEventListener('pointerup', event => {
+  if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+  const target = document.elementFromPoint(event.clientX,event.clientY);
+  const drag = clearPointerDrag();
+  if (!drag.ghost) return;
+  suppressClickUntil = performance.now()+500;
+  if (drag.editing) {
+    const rail = target?.closest('[data-rail]');
+    if (rail && bookEditing) saveCardPosition(drag.source.dataset.dragCard,Number(rail.dataset.rail),target.closest('[data-drag-card]')?.dataset.dragCard || null);
+  } else if (!bookEditing && target?.closest('.sentence-area')) {
+    try {
+      trial = sentenceTransition(trial,drag.source.dataset.dragCard ? 'select' : 'expression',drag.source.dataset.dragCard || drag.source.dataset.dragExpression,state.cards);
+      render(); saySelection(drag.source.dataset.dragCard ? state.cards.find(c => c.id === drag.source.dataset.dragCard).label : drag.source.dataset.dragExpression);
+    } catch(error) { toast(error.message); }
+  }
+});
+document.addEventListener('pointercancel', clearPointerDrag);
+window.addEventListener('blur', clearPointerDrag);

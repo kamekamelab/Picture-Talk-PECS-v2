@@ -1,7 +1,8 @@
+import { normalizeBook } from './book.js';
 import { cardLayout } from './cards.js';
 import { sentenceWords, commentEndings, COMMENTS } from './sentence.js';
 export const FORMAT = 'picture-talk-pecs-v2';
-export const SCHEMA = 6;
+export const SCHEMA = 7;
 export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 const safeImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const idPattern = /^[a-zA-Z0-9_-]{1,80}$/;
@@ -16,7 +17,7 @@ export function initialState() {
       { id: 'music', label: 'おんがく', category: 'かつどう', emoji: '🎵', image: null }
     ].map(c => ({ ...c, layout: cardLayout() })),
     records: [],
-    settings: { showLabel: true, pin: null, speech: { voiceURI: '', rate: 1, pauses: true, onSelect: false } },
+    settings: { book: { rails:4, columns:[['juice'],['ball'],['bubbles'],['music']] }, showLabel: true, pin: null, speech: { voiceURI: '', rate: 1, pauses: true, onSelect: false } },
     lastBackupAt: null
   };
 }
@@ -33,7 +34,7 @@ function date(value) {
   return value;
 }
 export function validateState(input) {
-  if (!input || ![1, 2, 3, 4, 5, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
+  if (!input || ![1, 2, 3, 4, 5, 6, SCHEMA].includes(input.schemaVersion)) throw new Error('対応していないデータ形式です。');
   if (!Array.isArray(input.cards) || input.cards.length < 1 || input.cards.length > 500) throw new Error('カードは1〜500枚にしてください。');
   const ids = new Set();
   const cards = input.cards.map(c => {
@@ -86,7 +87,7 @@ export function validateState(input) {
     schemaVersion: SCHEMA,
     profile: { alias: string(input.profile.alias, 40, '呼び名'), cardId: input.profile.cardId, phase, choiceIds, commentMode, mode },
     cards, records,
-    settings: { showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null, speech: speechSettings },
+    settings: { book: normalizeBook(input.settings.book, cards), showLabel: input.settings.showLabel, pin: pin ? { salt: pin.salt, hash: pin.hash } : null, speech: speechSettings },
     lastBackupAt: input.lastBackupAt === null ? null : date(input.lastBackupAt)
   };
   // 常に復元可能なサイズで書き出せるよう、封筒分の余裕を残す。

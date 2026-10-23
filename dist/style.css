@@ -1015,3 +1015,25 @@ dialog::backdrop {
 .phase-settings summary:focus-visible { outline:3px solid #b36b25; outline-offset:4px; }
 .phase-settings form { max-width:680px; }
 .phase-settings .wide + .wide { margin-top:14px; }
+/* テープはカード数や端末幅によらず4本／5本の列として保持する。 */
+.daily-book { grid-template-columns:repeat(4,minmax(80px,1fr)); gap:14px; min-height:360px; overflow-x:auto; align-items:stretch; }
+.daily-book.rails-5 { grid-template-columns:repeat(5,minmax(80px,1fr)); }
+.daily-rail { flex-direction:column; justify-content:flex-start; align-items:center; gap:16px; min-height:340px; padding:12px 4px 30px; }
+.daily-rail::before { width:26px; }
+.daily-rail .word-card { flex:0 0 auto; }
+.book-edit-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; text-align:left; }
+.book-edit-toolbar label { margin:0; min-width:110px; }
+.book-edit-toolbar p { margin:0; font-size:13px; }
+.drag-card, [data-drag-expression] { touch-action:none; user-select:none; -webkit-user-select:none; }
+.drag-ghost { position:fixed; z-index:999; pointer-events:none; opacity:.85; margin:0; min-height:0; box-shadow:0 6px 18px #0004; }
+.drop-target { outline:4px solid #1b6fbd; outline-offset:-4px; }
+.picked-card { outline:4px solid #1b6fbd; }
+.rail-place { margin-top:auto; font-size:11px; padding:8px; border:1px dashed #5c6c45; border-radius:8px; background:#fff9db; width:100%; }
+.book-editing .daily-rail { border:1px dashed #8d7733; border-radius:8px; }
+@media(max-width:600px) {
+ .daily-book { grid-template-columns:repeat(4,minmax(80px,1fr)); gap:10px; }
+ .daily-book.rails-5 { grid-template-columns:repeat(5,minmax(80px,1fr)); }
+ .book-edit-toolbar { flex-wrap:wrap; }
+ .daily-rail .card-face strong { font-size:13px; }
+ .daily-rail .card-emoji { font-size:42px; }
+}
