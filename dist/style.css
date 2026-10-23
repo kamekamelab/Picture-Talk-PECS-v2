@@ -1009,3 +1009,9 @@ dialog::backdrop {
 }
 
 .daily-rail .card-face.text-medium strong { font-size:18px; }
+
+.phase-settings { margin-bottom:24px; }
+.phase-settings summary { cursor:pointer; font-weight:750; font-size:18px; min-height:48px; padding:12px 0; }
+.phase-settings summary:focus-visible { outline:3px solid #b36b25; outline-offset:4px; }
+.phase-settings form { max-width:680px; }
+.phase-settings .wide + .wide { margin-top:14px; }

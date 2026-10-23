@@ -12,7 +12,7 @@ const now = () => new Date().toISOString();
 const uid = () => crypto.randomUUID();
 const dateLabel = value => value ? new Date(value).toLocaleString('ja-JP') : 'まだありません';
 let state;
-let screen = 'home';
+let screen = 'student';
 let trial = newTrial();
 let busy = false;
 let draftImage = null;
@@ -97,10 +97,10 @@ function saySelection(label) {
 }
 function tag() { return `<span class="status ${onlineReady ? 'ready' : ''}">${onlineReady ? '● オフライン準備済み' : '○ オフライン準備中'}</span>`; }
 function header(student = false) {
-  return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a>${student ? '<button class="quiet" data-action="teacher">先生用</button>' : tag()}</header>`;
+  return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a>${student ? '<button class="quiet" data-action="teacher">設定</button>' : tag()}</header>`;
 }
 function nav() {
-  return `<nav class="nav" aria-label="先生用メニュー">${[['home','学習の準備'],['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
+  return `<nav class="nav" aria-label="先生用メニュー"><button data-action="start-daily">ふだん使いへ</button>${[['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
 }
 function render() {
   if (!state) return;
@@ -109,16 +109,12 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ home: homeView, cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.8.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.9.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function isDaily() { return state.profile.mode === 'daily'; }
 function usesSentence() { return isDaily() || state.profile.phase >= 4; }
-function homeView() {
-  const card = state.cards.find(c => c.id === state.profile.cardId);
-  return `<section class="intro"><div><p class="eyebrow">学習の準備</p><h1>カードで、つたえる。</h1><p class="muted">学習段階とカードを選んで、つたえる学習をはじめましょう。</p></div><span class="phase-chip">Phase ${state.profile.phase}</span></section>
-  <section class="daily-launch"><div><h2>いつものカードブック</h2><p>学習段階を選ばず、カードで自由につたえます。</p></div><button class="primary" data-action="start-daily">ふだん使いを ひらく</button></section><div class="home-grid"><section class="panel"><div class="section-heading"><h2>今日の学習</h2><span class="subtle">日本語でつたえる</span></div><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="2" ${state.profile.phase === 2 ? 'selected' : ''}>Phase 2：自分からつたえる</option><option value="3" ${state.profile.phase === 3 ? 'selected' : ''}>Phase 3：複数からえらぶ</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：文と属性語でつたえる</option><option value="5" ${state.profile.phase === 5 ? 'selected' : ''}>Phase 5：質問に答えて要求する</option><option value="6" ${state.profile.phase === 6 ? 'selected' : ''}>Phase 6：コメントする</option></select></label><label>Phase 1・2で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === card.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><fieldset class="choice-settings"><legend>Phase 3で並べるカード（2枚以上）</legend>${state.cards.map(c => `<label class="check"><input type="checkbox" name="choiceIds" value="${c.id}" ${state.profile.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><label>Phase 6の学習方法<select name="commentMode">${[['spontaneous','自分からコメント（質問なし）'],['see','質問に答える：なにがみえますか？'],['hear','質問に答える：なにがきこえますか？'],['have','質問に答える：なにをもっていますか？']].map(([v,l]) => `<option value="${v}" ${state.profile.commentMode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="hint">Phase 5では先生が「なにがほしいですか？」と問いかけます。Phase 6では質問への応答と、質問なしのコメントを切り替えられます。</p><p class="hint">Phase 2では1枚のカードを使います。端末や相手との距離、場所を先生が調整してください。Phase 3では選んだカードだけを並べます。大きい・小さいなどを文に加えるのは、Phase 4に続く属性語と言語の拡張です。読み上げ回数は、各段階の達成を示すものではありません。</p><button type="button" class="secondary wide" data-action="add-size-cards">大きい・小さいのカードを追加</button><button class="primary wide" type="submit">学習を はじめる <span aria-hidden="true">→</span></button></form></section>
-  <section class="preview-panel"><p class="eyebrow">今選んでいるカード</p><div class="sample-card">${face(card)}</div><p class="muted">大きなカードで、つたえよう。</p></section></div>
-  <section class="roadmap-note"><span class="leaf" aria-hidden="true">↗</span><div><h2>まずは、1枚でつたえるところから。</h2><p>Phase 1〜6の画面を使えます。カードを選び、「よむ」でつたえます。</p></div></section>`;
+function phaseSettings() {
+  return `<details class="phase-settings panel"><summary>フェイズ別の練習（1〜6）</summary><p class="hint">普段はカードブックを使い、段階に合わせた練習をするときだけ選びます。アプリを開き直すと、ふだん使いに戻ります。</p><form id="learning-form"><label>呼び名 <span class="subtle">本名の登録は不要です</span><input name="alias" maxlength="40" value="${esc(state.profile.alias)}" required autocomplete="off"></label><label>学習段階<select name="phase"><option value="1" ${state.profile.phase === 1 ? 'selected' : ''}>Phase 1：1枚でつたえる</option><option value="2" ${state.profile.phase === 2 ? 'selected' : ''}>Phase 2：自分からつたえる</option><option value="3" ${state.profile.phase === 3 ? 'selected' : ''}>Phase 3：複数からえらぶ</option><option value="4" ${state.profile.phase === 4 ? 'selected' : ''}>Phase 4：文と属性語でつたえる</option><option value="5" ${state.profile.phase === 5 ? 'selected' : ''}>Phase 5：質問に答えて要求する</option><option value="6" ${state.profile.phase === 6 ? 'selected' : ''}>Phase 6：コメントする</option></select></label><label>Phase 1・2で使うカード<select name="cardId">${state.cards.map(c => `<option value="${c.id}" ${c.id === state.profile.cardId ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><fieldset class="choice-settings"><legend>Phase 3で並べるカード（2枚以上）</legend>${state.cards.map(c => `<label class="check"><input type="checkbox" name="choiceIds" value="${c.id}" ${state.profile.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><label>Phase 6の学習方法<select name="commentMode">${[['spontaneous','自分からコメント（質問なし）'],['see','質問に答える：なにがみえますか？'],['hear','質問に答える：なにがきこえますか？'],['have','質問に答える：なにをもっていますか？']].map(([v,l]) => `<option value="${v}" ${state.profile.commentMode === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="hint">Phase 5では先生が「なにがほしいですか？」と問いかけます。Phase 6では質問への応答と、質問なしのコメントを切り替えられます。</p><p class="hint">Phase 2では1枚のカードを使います。端末や相手との距離、場所を先生が調整してください。Phase 3では選んだカードだけを並べます。大きい・小さいなどを文に加えるのは、Phase 4に続く属性語と言語の拡張です。読み上げ回数は、各段階の達成を示すものではありません。</p><button type="button" class="secondary wide" data-action="add-size-cards">大きい・小さいのカードを追加</button><button class="primary wide" type="submit">このフェイズで 練習する <span aria-hidden="true">→</span></button></form></details>`;
 }
 function cardsView() {
   return `<section class="intro"><div><p class="eyebrow">カードブック</p><h1>いつもの物を、カードに。</h1><p class="muted">写真・イラスト・文字を自由に組み合わせられます。</p></div><button class="primary" data-action="new-card">＋ カードをつくる</button></section><div class="card-grid">${state.cards.map(c => `<article class="editor-card"><div class="editor-visual">${face(c)}</div><div class="editor-meta"><span class="subtle">${esc(c.category)}</span><h2>${esc(c.label)}</h2><button class="secondary wide" data-edit="${c.id}">${esc(c.label)}を編集</button></div></article>`).join('')}</div>`;
@@ -133,7 +129,7 @@ function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
 }
 function settingsView() {
-  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">生徒画面に見せるものを調整します。</p></div></section><div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。カード選択時の読み上げは、下の音声設定で切り替えられます。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">「先生用」を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
+  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">カードの表示・音声・フェイズ別の練習を調整します。</p></div></section>${phaseSettings()}<div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。カード選択時の読み上げは、下の音声設定で切り替えられます。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">カードブックの「設定」を押し、確認画面を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
 }
 function prepareCardMotion(before, after) {
   const keys = value => [...value.cardIds.map(id => `item:${id}`), ...(value.ending ? ['ending:request'] : [])];
@@ -309,7 +305,7 @@ function teacherGate() {
 function enterTeacher() {
   if (state.settings.pin && !unlocked) {
     modal('先生用PIN', '<form id="unlock-form"><label>PINを入力<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autofocus autocomplete="off"></label><button class="primary wide">先生用画面を開く</button><p id="pin-error" role="alert"></p></form>');
-  } else { screen = 'home'; closeDialog(); render(); }
+  } else { screen = 'settings'; closeDialog(); render(); }
 }
 function recordDialog() {
   modal('先生用：今回の様子', '<p>今回の学習の様子を選んでください。</p><div class="record-choices"><button class="primary" data-support="independent">自分から</button><button class="secondary" data-support="assisted">支援あり</button><button class="quiet" data-support="unrated">あとで評価する</button></div>');
@@ -373,7 +369,7 @@ document.addEventListener('click', event => {
   if (action === 'stop-speech') return;
   if (action === 'close-dialog') return closeDialog();
   if (action === 'teacher') return teacherGate();
-  if (action === 'home') { screen = 'home'; render(); return; }
+  if (action === 'home') { screen = 'settings'; render(); return; }
   if (action === 'new-card') return cardEditor();
   if (action === 'select' || action === 'reset') {
     if (pendingRecord) return recordDialog();
@@ -458,10 +454,7 @@ document.addEventListener('change', async event => {
   const input = event.target;
   if (input.id === 'print-size') { printSize = Number(input.value); render(); return; }
   if (input.dataset.printCard) { const selected = new Set(printSelection ?? state.cards.map(c => c.id)); if (input.checked) selected.add(input.dataset.printCard); else selected.delete(input.dataset.printCard); printSelection = [...selected]; render(); return; }
-  if (input.name === 'cardId' && screen === 'home') {
-    const card = state.cards.find(c => c.id === input.value);
-    if (card) document.querySelector('.sample-card').innerHTML = face(card);
-  } else if (input.id === 'card-image') {
+  if (input.id === 'card-image') {
     const file = input.files?.[0]; if (!file) return;
     imageBusy = true;
     const token = editorToken;
@@ -495,7 +488,14 @@ async function prepareOffline() {
   } catch { toast('オフライン準備ができませんでした。オンラインで開き直してください。'); }
 }
 async function start() {
-  try { state = await openStorage(); if (state.settings.pin) screen = 'locked'; render(); prepareOffline(); }
+  try {
+    state = await openStorage();
+    if (state.profile.mode !== 'daily') {
+      const next = structuredClone(state); next.profile.mode = 'daily'; await persist(next);
+    }
+    screen = 'student'; trial = newSentenceTrial('', true); dailyCategory = null; unlocked = false;
+    render(); prepareOffline();
+  }
   catch {
     app.innerHTML = `<main class="loading"><h1>保存領域を開けませんでした</h1><p>データは上書きしていません。通常のブラウザーで開き直してください。</p><p>保存済みデータの形式が違う場合は、ブラウザーデータを削除せず開発担当へ相談してください。</p><button class="secondary" id="retry">もう一度開く</button></main>`;
     document.querySelector('#retry').onclick = () => location.reload();
