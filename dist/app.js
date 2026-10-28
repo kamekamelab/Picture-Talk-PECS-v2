@@ -101,8 +101,40 @@ function saySelection(label) {
   catch (error) { toast(error.message); }
 }
 function tag() { return `<span class="status ${onlineReady ? 'ready' : ''}">${onlineReady ? '● オフライン準備済み' : '○ オフライン準備中'}</span>`; }
+let fullscreenPending = false;
+function fullscreenActive() { return Boolean(document.fullscreenElement || document.webkitFullscreenElement); }
+function fullscreenButton() {
+  return `<button class="quiet fullscreen-toggle" data-action="fullscreen" aria-pressed="${fullscreenActive()}" ${fullscreenPending ? 'disabled' : ''}>${fullscreenActive() ? '全画面を終了' : '全画面'}</button>`;
+}
+function syncFullscreenButton() {
+  const button = app.querySelector('[data-action="fullscreen"]');
+  if (!button) return;
+  button.textContent = fullscreenActive() ? '全画面を終了' : '全画面';
+  button.setAttribute('aria-pressed', String(fullscreenActive()));
+  button.disabled = fullscreenPending;
+}
+function fullscreenHelp(failed = false) {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  modal('全画面表示', `<p>${standalone ? 'ホーム画面から開いているため、すでにブラウザーのアドレスバーがない表示です。' : failed ? 'この環境では全画面に切り替えられませんでした。' : 'このブラウザーは全画面への切り替えに対応していません。'}</p><p>iPadではSafariの共有メニューから「ホーム画面に追加」し、追加したアイコンから開くと、アドレスバーなしで使えます。</p><p class="hint">カードや文はそのままです。</p>`);
+}
+async function toggleFullscreen() {
+  if (fullscreenPending) return;
+  const root = document.documentElement;
+  const active = fullscreenActive();
+  const method = active ? (document.exitFullscreen || document.webkitExitFullscreen) : (root.requestFullscreen || root.webkitRequestFullscreen);
+  if (!method || (!active && (root.requestFullscreen ? document.fullscreenEnabled === false : document.webkitFullscreenEnabled === false))) { fullscreenHelp(); return; }
+  fullscreenPending = true; syncFullscreenButton();
+  try {
+    // Request directly from the tap so Safari retains user activation.
+    await method.call(active ? document : root);
+  } catch { fullscreenHelp(true); }
+  finally { fullscreenPending = false; syncFullscreenButton(); }
+}
+// Also follow exits made with Escape or the browser's own controls.
+document.addEventListener('fullscreenchange', syncFullscreenButton);
+document.addEventListener('webkitfullscreenchange', syncFullscreenButton);
 function header(student = false) {
-  return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a>${student ? '<button class="quiet" data-action="teacher">設定</button>' : tag()}</header>`;
+  return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a><div class="header-actions">${fullscreenButton()}${student ? '<button class="quiet" data-action="teacher">設定</button>' : tag()}</div></header>`;
 }
 function nav() {
   return `<nav class="nav" aria-label="先生用メニュー"><button data-action="start-daily">ふだん使いへ</button>${[['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
@@ -114,7 +146,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.1 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function isDaily() { return state.profile.mode === 'daily'; }
 function usesSentence() { return isDaily() || state.profile.phase >= 4; }
@@ -323,6 +355,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
+  if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }
   if (button.dataset.pickCard) { pickedCard = button.dataset.pickCard; render(); return; }
   if (button.dataset.placeRail !== undefined) { saveCardPosition(pickedCard,Number(button.dataset.placeRail)); return; }
   if (button.dataset.action !== 'speak') { pendingReading = null; reader.stop(); }

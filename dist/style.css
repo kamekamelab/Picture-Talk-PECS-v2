@@ -1037,3 +1037,14 @@ dialog::backdrop {
  .daily-rail .card-face strong { font-size:13px; }
  .daily-rail .card-emoji { font-size:42px; }
 }
+
+/* Fullscreen keeps the root (including dialogs) mounted and scrollable. */
+html:fullscreen { overflow:auto; background:#f6f7f2; }
+html:-webkit-full-screen { overflow:auto; background:#f6f7f2; }
+.header-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; }
+.fullscreen-toggle { min-height:48px; white-space:nowrap; }
+@media(max-width:600px) {
+  .header-actions { gap:4px; }
+  .header-actions .quiet { padding:10px; font-size:13px; }
+  .top { gap:8px; flex-wrap:wrap; }
+}
