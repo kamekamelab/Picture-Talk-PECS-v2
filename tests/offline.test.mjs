@@ -39,6 +39,9 @@ async function environment({ failingAsset = null } = {}) {
     offline: () => { online = false; },
     get networkCalls() { return networkCalls; },
     lifecycle: name => new Promise((resolve, reject) => listeners.get(name)({ waitUntil: promise => promise.then(resolve, reject) })),
+    check: () => new Promise((resolve, reject) => {
+      listeners.get('message')({ data: { type: 'CHECK_OFFLINE' }, ports: [{ postMessage: resolve }], waitUntil: promise => promise.catch(reject) });
+    }),
     request: (path, mode = 'cors') => new Promise((resolve, reject) => {
       let handled = false;
       listeners.get('fetch')({ request: { method: 'GET', url: new URL(path, 'https://school.example/Picture-Talk-PECS-v2/').href, mode }, respondWith: promise => { handled = true; promise.then(resolve, reject); } });
@@ -70,4 +73,17 @@ test('必須素材の取得に失敗した更新を有効化しない', async ()
   const env = await environment({ failingAsset: 'app.js' });
   await assert.rejects(env.lifecycle('install'), /network unavailable/);
   assert.ok(env.buckets.has('ptp-v2-shell-old'));
+});
+
+test('準備済み表示は通信状態ではなく必須ファイルの実際の保存を確認する', async () => {
+  const env = await environment();
+  assert.equal((await env.check()).ready, false);
+  await env.lifecycle('install'); await env.lifecycle('activate');
+  env.offline();
+  const calls = env.networkCalls;
+  assert.equal((await env.check()).ready, true);
+  assert.equal(env.networkCalls, calls);
+  const current = [...env.buckets.entries()].find(([key]) => key.startsWith('ptp-v2-shell-'))[1];
+  current.delete('https://school.example/Picture-Talk-PECS-v2/app.js');
+  assert.equal((await env.check()).ready, false);
 });

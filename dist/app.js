@@ -20,6 +20,8 @@ let draftImage = null;
 let editedId = null;
 let pendingRestore = null;
 let onlineReady = false;
+let offlineState = 'checking';
+let offlineChecking = false;
 let noticeTimer;
 let unlocked = false;
 let imageBusy = false;
@@ -100,7 +102,27 @@ function saySelection(label) {
   try { reader.read([label], state.settings.speech); }
   catch (error) { toast(error.message); }
 }
-function tag() { return `<span class="status ${onlineReady ? 'ready' : ''}">${onlineReady ? '● オフライン準備済み' : '○ オフライン準備中'}</span>`; }
+function offlineLabel() {
+  if (onlineReady) return navigator.onLine === false ? '● オフラインで利用中' : '● オフライン準備済み';
+  return offlineState === 'checking' ? '○ オフライン準備中' : '○ オフライン準備を確認';
+}
+function offlineDescription() {
+  if (onlineReady) return 'この端末へのアプリの保存を確認しました。Wi-Fiを切っても、カード・文づくり・編集・記録を使えます。読み上げには端末内の日本語音声が必要です。';
+  if (offlineState === 'unsupported') return 'このブラウザーではオフライン保存を利用できません。iPadではSafariで開いてください。';
+  if (offlineState === 'checking') return 'オフライン用のファイルを確認しています。初回はインターネットにつないだままお待ちください。';
+  return 'オフライン用の保存を確認できませんでした。インターネットにつなぎ、下のボタンでもう一度確認してください。更新した直後は、このアプリの画面をすべて閉じて開き直してください。';
+}
+function tag() { return `<span class="status ${onlineReady ? 'ready' : ''}" data-offline-status role="status">${offlineLabel()}</span>`; }
+function offlinePanel() {
+  return `<section class="info-note"><h2>オフラインで使う</h2><p id="offline-status">${offlineDescription()}</p><button class="secondary" data-action="offline-retry" ${offlineChecking ? 'disabled' : ''}>オフラインの準備を確認</button><p class="hint">iPadではSafariの共有メニューから「ホーム画面に追加」し、追加したアイコンをオンラインで一度開いてください。「オフライン準備済み」を確認したら、機内モードでも開けるか試してください。</p><p class="hint">写真・記録は端末内に保存されます。ブラウザーの保存データを削除すると使えなくなるため、バックアップも保存してください。</p></section>`;
+}
+function syncOfflineStatus() {
+  document.querySelectorAll('[data-offline-status]').forEach(element => { element.textContent = offlineLabel(); element.classList.toggle('ready', onlineReady); });
+  const text = document.querySelector('#offline-status'); if (text) text.textContent = offlineDescription();
+  document.querySelectorAll('[data-action="offline-retry"]').forEach(button => { button.disabled = offlineChecking; });
+}
+window.addEventListener('online', () => { syncOfflineStatus(); prepareOffline(); });
+window.addEventListener('offline', syncOfflineStatus);
 let fullscreenPending = false;
 function fullscreenActive() { return Boolean(document.fullscreenElement || document.webkitFullscreenElement); }
 function fullscreenButton() {
@@ -146,7 +168,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.1 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? `${studentView()}<div class="student-offline">${tag()}</div>` : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.2 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
 }
 function isDaily() { return state.profile.mode === 'daily'; }
 function usesSentence() { return isDaily() || state.profile.phase >= 4; }
@@ -166,7 +188,7 @@ function backupView() {
   return `<section class="intro"><div><p class="eyebrow">バックアップ</p><h1>大切なカードを、手元に。</h1><p class="muted">写真・設定・記録をひとつのファイルにまとめます。</p></div></section><div class="home-grid"><section class="panel"><h2>バックアップを保存</h2><p>カード ${state.cards.length}枚 ／ 記録 ${state.records.length}件</p><p class="muted">最終書き出し：${dateLabel(state.lastBackupAt)}</p><button class="primary wide" data-action="backup">ファイルを保存する</button><p class="hint">書き出し後、iPadの「ファイル」で保存されたことを確認してください。</p></section><section class="panel"><h2>ファイルから復元</h2><p class="muted">v2で保存したバックアップを選びます。復元前に内容を確認できます。</p><label class="file-picker">バックアップを選ぶ<input id="restore-file" type="file" accept=".json,application/json"></label><p class="hint">復元すると現在のカード・設定・記録が置き換わります。先に現在のバックアップを保存してください。</p></section></div><aside class="info-note"><strong>端末内の保存と、バックアップは別です。</strong><p>ブラウザーデータの削除や端末の故障で、端末内データは失われることがあります。バックアップは暗号化されていません。学校の運用に沿った保存先で管理してください。</p></aside>`;
 }
 function settingsView() {
-  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">カードの表示・音声・フェイズ別の練習を調整します。</p></div></section>${phaseSettings()}<div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。カード選択時の読み上げは、下の音声設定で切り替えられます。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">カードブックの「設定」を押し、確認画面を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p id="offline-status">${onlineReady ? 'オフライン準備ができています。機内モードでの起動も確認してください。' : '初回の準備にはインターネット接続が必要です。'}</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>`;
+  return `<section class="intro"><div><p class="eyebrow">先生用設定</p><h1>使いやすさを、ひとりずつ。</h1><p class="muted">カードの表示・音声・フェイズ別の練習を調整します。</p></div></section>${phaseSettings()}<div class="home-grid"><section class="panel"><h2>カードの表示</h2><form id="display-form"><label class="check"><input type="checkbox" name="showLabel" ${state.settings.showLabel ? 'checked' : ''}> 生徒画面にカードの文字を表示する</label><button type="submit" class="secondary">表示設定を保存</button></form><p class="hint">「よむ」を押すと文を読み上げます。カード選択時の読み上げは、下の音声設定で切り替えられます。</p></section><section class="panel"><h2>先生用画面への入口</h2><p class="muted">カードブックの「設定」を押し、確認画面を長押し${state.settings.pin ? 'し、PINを入力' : ''}すると戻れます。</p><form id="pin-form"><label>${state.settings.pin ? '新しいPIN（空欄で解除）' : 'PINを設定（任意）'}<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" placeholder="数字4〜8桁"></label><button class="secondary" type="submit">PIN設定を保存</button></form><p class="hint">PINは誤操作防止用です。データの暗号化ではありません。忘れた場合は、学習開始前のバックアップから復元してください。</p></section></div><section class="info-note"><h2>この端末での利用</h2><h3>読み上げ</h3><p id="voice-status">${esc(voiceStatus())}</p>${speechSettingsForm()}<p>読み上げには端末内の日本語音声だけを使います。端末に音声がない場合、クラウド音声への切り替えは行いません。</p><p>写真と記録の外部送信・自動同期は行いません。オンラインでの初回アクセスや更新時には、配信先との通信が発生します。</p><button class="secondary" data-action="persistent">端末内の保存を保護する</button><p class="hint">ブラウザーが対応している場合、保存データが自動削除されにくくなるよう要求します。バックアップは引き続き必要です。</p></section>${offlinePanel()}`;
 }
 function prepareCardMotion(before, after) {
   const keys = value => [...value.cardIds.map(id => `item:${id}`), ...(value.ending ? ['ending:request'] : [])];
@@ -355,6 +377,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
   if (!button || busy) return;
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
+  if (button.dataset.action === 'offline-retry') { prepareOffline(); return; }
   if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }
   if (button.dataset.pickCard) { pickedCard = button.dataset.pickCard; render(); return; }
   if (button.dataset.placeRail !== undefined) { saveCardPosition(pickedCard,Number(button.dataset.placeRail)); return; }
@@ -521,17 +544,38 @@ dialog.addEventListener('cancel', event => {
   if (busy || imageBusy || pendingRecord) { event.preventDefault(); if (pendingRecord) toast('今回の様子を選んでください。未評価でも保存できます。'); }
 });
 
-async function prepareOffline() {
-  if (!('serviceWorker' in navigator)) return;
-  try {
-    await navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' });
-    await navigator.serviceWorker.ready;
-    onlineReady = true;
-    // 入力中のフォームを再描画しない。
-    const status = app.querySelector('.status'); if (status) { status.textContent = '● オフライン準備済み'; status.classList.add('ready'); }
-    const text = document.querySelector('#offline-status'); if (text) text.textContent = 'オフライン準備ができています。機内モードでの起動も確認してください。';
-  } catch { toast('オフライン準備ができませんでした。オンラインで開き直してください。'); }
+function checkOfflineFiles(worker) {
+  return new Promise((resolve, reject) => {
+    const channel = new MessageChannel();
+    const finish = (error, ready) => { clearTimeout(timer); channel.port1.close(); channel.port2.close(); error ? reject(error) : resolve(ready); };
+    const timer = setTimeout(() => finish(new Error('offline check timed out')), 8000);
+    channel.port1.onmessage = event => finish(null, event.data?.ready === true);
+    try { worker.postMessage({ type: 'CHECK_OFFLINE' }, [channel.port2]); }
+    catch (error) { finish(error); }
+  });
 }
+async function prepareOffline() {
+  if (offlineChecking) return;
+  if (!('serviceWorker' in navigator)) { offlineState = 'unsupported'; syncOfflineStatus(); return; }
+  offlineChecking = true; offlineState = 'checking'; syncOfflineStatus();
+  let timer;
+  try {
+    // Reuse a saved worker even if the update request cannot reach the server.
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('offline preparation timed out')), 15000); });
+    let registration = await Promise.race([navigator.serviceWorker.getRegistration('./'), timeout]);
+    if (registration?.active) {
+      // A slow or absent connection must not delay access to the saved app.
+      registration.update().catch(() => {});
+    } else {
+      registration = await Promise.race([navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' }), timeout]);
+    }
+    const ready = registration?.active ? registration : await Promise.race([navigator.serviceWorker.ready, timeout]);
+    onlineReady = await checkOfflineFiles(ready.active);
+    offlineState = onlineReady ? 'ready' : 'error';
+  } catch { onlineReady = false; offlineState = 'error'; }
+  finally { clearTimeout(timer); offlineChecking = false; syncOfflineStatus(); }
+}
+
 async function start() {
   try {
     state = await openStorage();

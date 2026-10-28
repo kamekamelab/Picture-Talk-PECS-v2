@@ -1048,3 +1048,6 @@ html:-webkit-full-screen { overflow:auto; background:#f6f7f2; }
   .header-actions .quiet { padding:10px; font-size:13px; }
   .top { gap:8px; flex-wrap:wrap; }
 }
+
+.student-offline { display:flex; justify-content:flex-end; margin-top:16px; }
+@media print { .student-offline { display:none; } }

@@ -1,6 +1,6 @@
 {
   "name": "picture-talk-pecs-v2",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": true,
   "type": "module",
   "scripts": {
