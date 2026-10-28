@@ -80,14 +80,16 @@ npm run check
 
 初回の読み込み完了後、「オフライン準備済み」を確認します。カード画像はIndexedDB、プログラム類は専用キャッシュに保存します。新しいバージョンは開いている画面を強制更新せず、すべてのタブを閉じて開き直すと適用されます。更新時は `dist/sw.js` のキャッシュ名も変更してください。
 
-ローカルPCのlocalhostはiPadから開けません。iPad実機では、後の公開工程でGitHub Pages等のHTTPS配信先を用意して検証します。通常のLAN内HTTP配信ではPWAの検証はできません。
+ローカルPCのlocalhostはiPadから開けません。iPadでは下記のHTTPS配信先をSafariで開き、共有メニューから「ホーム画面に追加」します。最初はオンラインで開き、「オフライン準備済み」を確認してください。実iPadでの操作と機内モードは引き続き確認が必要です。
 
-## GitHub Pages（未公開）
+## GitHub Pages
 
 `dist/` 以下をそのまま配信できる静的構成です。サーバーDBやAPIは不要です。
-公開工程でGitHub Actionsによる `dist/` のアップロードとPagesへのデプロイを追加する予定です。
+テスト用URL：https://kamekamelab.github.io/Picture-Talk-PECS-v2/
+
+`main`へのpushでGitHub Actionsが`npm run check`を実行し、成功した場合だけ`dist/`をPagesへ配置します。
 アセット・Service Worker・manifestは相対URLで、リポジトリ配下のURLに対応しています。
-初期版ではPagesを有効化していません。
+写真・カード・記録は端末内のIndexedDBに保存され、公開ファイルに含まれません。localhost版や別の端末から自動で移りません。必要な場合は元の環境でバックアップを保存し、新しい環境で復元してください。
 
 ## 資料
 
