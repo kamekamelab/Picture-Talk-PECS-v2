@@ -33,6 +33,8 @@ let printSelection = null;
 let printSize = 35;
 let dailyCategory = null;
 let cardPage = 0;
+let categoryPage = 0;
+let predicateOpen = false;
 let bookEditing = false;
 let pickedCard = null;
 let pointerDrag = null;
@@ -179,7 +181,7 @@ function render() {
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${student ? studentControls() : header(false)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.11.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${student ? studentControls() : header(false)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.12.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
   syncFullscreenButton();
 }
 function isDaily() { return state.profile.mode === 'daily'; }
@@ -262,13 +264,33 @@ function pageControls(page) {
 function studentControls() {
   return `<div class="student-controls">${fullscreenButton()}${isDaily() ? '<button class="quiet" data-action="edit-book" aria-label="配置を編集" title="配置を編集">✎</button>' : ''}<button class="quiet" data-action="teacher" aria-label="設定" title="設定">⚙</button></div>`;
 }
+function predicateToggle() {
+  return `<button class="predicate-toggle" data-action="toggle-predicate" aria-pressed="${predicateOpen}" aria-label="つたえることばのページ${predicateOpen ? 'を閉じる' : 'を開く'}"><span>つたえることば</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v11H11l-5 5v-5H5z"/><path d="M8 8h8M8 11h6"/></svg></button>`;
+}
+function categoryIcon(label) {
+  if (!label) return '⌂';
+  if (/の[みむ]もの|飲|水/.test(label)) return '🥤';
+  if (/たべもの|食|おやつ/.test(label)) return '🍎';
+  if (/あそび|遊|おもちゃ/.test(label)) return '🧸';
+  if (/かつどう|動|運動/.test(label)) return '🏃';
+  if (/おおき|形|色|かたち/.test(label)) return '◆';
+  if (/場所|ばしょ|家/.test(label)) return '⌂';
+  return '▦';
+}
+function categoryTabs(categories) {
+  const all = [null, ...categories];
+  const page = paginateBook([all], categoryPage, 4); categoryPage = page.page;
+  return `<nav class="category-tabs reference-tabs" aria-label="カードのカテゴリ">${page.pages > 1 ? `<button class="tab-turn" data-category-page="${page.page-1}" aria-label="前のカテゴリ" ${page.page === 0 ? 'disabled' : ''}>◀</button>` : ''}${page.columns[0].map(c => `<button class="category-tab tab-color-${all.indexOf(c)%6}" data-category="${esc(c || '')}" aria-pressed="${!predicateOpen && dailyCategory === c}" aria-label="${esc(c || 'ぜんぶ')}"><span class="tab-name">${esc(c || 'ぜんぶ')}</span><span class="tab-icon" aria-hidden="true">${categoryIcon(c)}</span></button>`).join('')}${page.pages > 1 ? `<button class="tab-turn" data-category-page="${page.page+1}" aria-label="次のカテゴリ" ${page.page === page.pages-1 ? 'disabled' : ''}>▶</button>` : ''}</nav>`;
+}
 function sentenceView() {
   const phase = state.profile.phase;
   const mode = state.profile.commentMode;
   const cards = state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim()));
   const page = paginateBook([cards], cardPage, state.settings.book.rails * 2); cardPage = page.page;
   const endings = phase === 6 ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([,c]) => ({...c})) : [{label:REQUEST,emoji:'🤲'}];
-  return `<main class="student sentence-student practice-binder" aria-label="練習のカードブック"><section class="sentence-book rails-${state.settings.book.rails}" aria-label="カードブック">${page.columns[0].map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}</section><div class="book-navigation">${pageControls(page)}</div><section class="daily-endings" aria-label="つたえることば">${endings.map(c=>`<button class="word-card request-choice" data-sentence-action="${phase === 6 ? 'expression' : 'ending'}" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && endingWord(trial) === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ">${sentenceBoard(true)}</section></main>`;
+  const words = page.columns[0].map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('');
+  const endingCards = endings.map(c => `<button class="word-card request-choice" data-sentence-action="${phase === 6 ? 'expression' : 'ending'}" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && endingWord(trial) === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('');
+  return `<main class="student sentence-student practice-binder reference-binder" aria-label="練習のカードブック">${predicateToggle()}<section class="sentence-book rails-${state.settings.book.rails}" aria-label="${predicateOpen ? 'つたえることば' : 'カードブック'}">${predicateOpen ? endingCards : words}</section><div class="book-navigation">${predicateOpen ? '' : pageControls(page)}</div><section class="sentence-area" aria-label="ぶんをつくるところ">${sentenceBoard(true)}</section></main>`;
 }
 function dailyView() {
   const categories = [...new Set(state.cards.map(c => c.category))];
@@ -276,9 +298,11 @@ function dailyView() {
   const cards = state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim()) && (dailyCategory === null || c.category === dailyCategory));
   const book = state.settings.book;
   const page = paginateBook(book.columns.map(column => column.filter(id => cards.some(c => c.id === id))), cardPage); cardPage = page.page;
-  const rails = page.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
   const endings = [{ label: REQUEST, emoji: '🤲' }, ...Object.values(COMMENTS)];
-  return `<main class="student daily-student" aria-label="カードブック"><div class="book-edit-toolbar ${bookEditing ? 'is-editing' : ''}">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : ``}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="book-navigation" aria-label="カードのカテゴリとページ"><select id="daily-category" aria-label="カードのカテゴリ"><option value="">ぜんぶ</option>${categories.map(c => `<option value="${esc(c)}" ${dailyCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>${pageControls(page)}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ">${bookEditing ? '' : sentenceBoard(true)}</section></div></main>`;
+  const showPredicates = predicateOpen && !bookEditing;
+  const rails = page.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${showPredicates ? (endings[index] ? `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${endings[index].label}" data-drag-expression="${endings[index].label}" aria-label="${endings[index].label}を文に入れる" ${trial.ending && trial.expression === endings[index].label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${endings[index].emoji}</span><strong>${endings[index].label === 'をもっています' ? 'をもって<br>います' : endings[index].label}</strong></button>` : '') : column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
+  const color = showPredicates ? 6 : (dailyCategory === null ? 0 : (categories.indexOf(dailyCategory)+1)%6);
+  return `<main class="student daily-student" aria-label="カードブック"><div class="book-edit-toolbar ${bookEditing ? 'is-editing' : ''}">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : ''}</div><div class="daily-binder reference-binder page-color-${color} ${bookEditing ? 'book-editing' : ''}">${bookEditing ? '' : predicateToggle()}<section class="daily-book rails-${book.rails}" aria-label="${showPredicates ? 'つたえることば' : 'カードブック'}">${rails}</section>${categoryTabs(categories)}${showPredicates ? '' : `<div class="book-navigation">${pageControls(page)}</div>`}<section class="sentence-area" aria-label="ぶんをつくるところ">${bookEditing ? '' : sentenceBoard(true)}</section></div></main>`;
 }
 function sizeCardImage(radius) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 200;
@@ -403,6 +427,8 @@ document.addEventListener('click', event => {
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
   if (button.dataset.action === 'offline-retry') { prepareOffline(); return; }
   if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }
+  if (button.dataset.categoryPage !== undefined) { categoryPage = Number(button.dataset.categoryPage); render(); return; }
+  if (button.dataset.action === 'toggle-predicate') { predicateOpen = !predicateOpen; render(); return; }
   if (button.dataset.cardPage !== undefined) { cardPage = Number(button.dataset.cardPage); render(); return; }
   if (button.dataset.pickCard) { pickedCard = button.dataset.pickCard; render(); return; }
   if (button.dataset.placeRail !== undefined) { saveCardPosition(pickedCard,Number(button.dataset.placeRail)); return; }
@@ -412,14 +438,16 @@ document.addEventListener('click', event => {
     try {
       const next = sentenceTransition(trial, button.dataset.sentenceAction, button.dataset.expression || button.dataset.cardId, state.cards);
       const animate = prepareCardMotion(trial, next);
-      trial = next; render(); animate();
+      trial = next;
+      if (['expression','ending'].includes(button.dataset.sentenceAction) && trial.ending) predicateOpen = false;
+      render(); animate();
       if (button.dataset.sentenceAction === 'select') saySelection(state.cards.find(c => c.id === button.dataset.cardId).label);
       if (button.dataset.sentenceAction === 'ending' && trial.ending) saySelection(endingWord(trial));
       if (button.dataset.sentenceAction === 'expression') saySelection(trial.expression);
     } catch (error) { toast(error.message); }
     return;
   }
-  if (button.dataset.category !== undefined) { dailyCategory = button.dataset.category || null; cardPage = 0; render(); return; }
+  if (button.dataset.category !== undefined) { dailyCategory = button.dataset.category || null; cardPage = 0; predicateOpen = false; render(); return; }
   if (button.dataset.recordId) {
     pendingRecord = state.records.find(r => r.id === button.dataset.recordId);
     if (pendingRecord) recordDialog();
@@ -471,7 +499,7 @@ document.addEventListener('click', event => {
   run(async () => {
     if (action === 'start-daily') {
       const next = structuredClone(state); next.profile.mode = 'daily'; await persist(next);
-      bookEditing = false; pickedCard = null; dailyCategory = null; cardPage = 0; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
+      bookEditing = false; pickedCard = null; dailyCategory = null; cardPage = 0; categoryPage = 0; predicateOpen = false; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
     } else if (action === 'add-size-cards') {
       const next = structuredClone(state);
       for (const [label, radius] of [['おおきい',72], ['ちいさい',28]]) {
@@ -518,7 +546,7 @@ document.addEventListener('submit', event => {
     const next = structuredClone(state);
     if (form.id === 'learning-form') {
       next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds'), commentMode: fields.get('commentMode'), mode: 'learning' };
-      await persist(next); unlocked = false; screen = 'student'; cardPage = 0; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
+      await persist(next); unlocked = false; screen = 'student'; cardPage = 0; predicateOpen = false; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
     } else if (form.id === 'card-form') {
       const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage, layout: { position: fields.get('position'), textSize: fields.get('textSize') } };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);
@@ -688,6 +716,7 @@ document.addEventListener('pointerup', event => {
   } else if (!bookEditing && target?.closest('.sentence-area')) {
     try {
       trial = sentenceTransition(trial,drag.source.dataset.dragCard ? 'select' : 'expression',drag.source.dataset.dragCard || drag.source.dataset.dragExpression,state.cards);
+      if (drag.source.dataset.dragExpression && trial.ending) predicateOpen = false;
       render(); saySelection(drag.source.dataset.dragCard ? state.cards.find(c => c.id === drag.source.dataset.dragCard).label : drag.source.dataset.dragExpression);
     } catch(error) { toast(error.message); }
   }

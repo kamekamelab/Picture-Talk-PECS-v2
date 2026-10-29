@@ -1125,3 +1125,42 @@ body.student-mode .single-book .card-emoji { font-size:clamp(44px,9dvh,88px); }
 body.student-mode .rail-place { min-height:32px; padding:3px; }
 body.student-mode .fullscreen-exit { top:max(3px,env(safe-area-inset-top)); width:44px; height:44px; min-height:44px; }
 @media print { body.student-mode { height:auto; overflow:visible; } }
+
+/* Book silhouette from the reference: page, shaped tabs, removable sentence strip. */
+body.student-mode .reference-binder { position:relative; padding:48px 0 0; gap:0; background:#565cbd; border:2px solid #42466e; border-radius:14px 14px 12px 12px; }
+body.student-mode .page-color-1 { background:#39909b; }
+body.student-mode .page-color-2 { background:#ba4e50; }
+body.student-mode .page-color-3 { background:#789643; }
+body.student-mode .page-color-4 { background:#8b5fac; }
+body.student-mode .page-color-5 { background:#bc8551; }
+body.student-mode .page-color-6 { background:#424547; }
+.predicate-toggle { position:absolute; z-index:3; top:0; left:50%; transform:translateX(-50%); width:164px; min-height:44px; height:44px; padding:4px 12px 6px; border:1px solid #20221f; border-radius:0 0 36px 36px; background:#292b2b; color:#fff; font-size:12px; box-shadow:0 4px 6px #0004; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.predicate-toggle svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.4; }
+.predicate-toggle[aria-pressed="true"] { background:#111; box-shadow:inset 0 0 0 2px #e4c16c; }
+body.student-mode .reference-binder .daily-book { margin:8px 18px 10px; padding:0; }
+body.student-mode .daily-rail::before { width:24px; border-color:#c2c3bc; background-color:#dddcd1; box-shadow:0 1px 3px #0003; }
+body.student-mode .word-card,body.student-mode .daily-rail .word-card,body.student-mode .sentence-unit .word-card { border-radius:2px; border-color:#aaa994; background:#fffefb; box-shadow:0 2px 3px #0004; }
+body.student-mode .reference-tabs { display:flex; flex-shrink:0; min-height:64px; height:64px; gap:2px; padding:0 7px; border:0; overflow:hidden; background:#4d514e; }
+body.student-mode .reference-tabs .category-tab { flex:1 1 0; min-width:0; min-height:60px; height:60px; border:0; border-radius:0; clip-path:polygon(0 0,100% 0,88% 100%,12% 100%); padding:6px 8px 10px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; gap:1px; color:#1d2424; background:#e5b34d; box-shadow:none; }
+body.student-mode .reference-tabs .tab-name { max-width:100%; font-size:clamp(12px,1.8dvh,16px); line-height:1.2; font-weight:700; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+body.student-mode .reference-tabs .tab-icon { font-size:22px; line-height:1; }
+body.student-mode .reference-tabs .tab-color-1 { background:#6cbdc4; }
+body.student-mode .reference-tabs .tab-color-2 { background:#d898c0; }
+body.student-mode .reference-tabs .tab-color-3 { background:#a3c653; }
+body.student-mode .reference-tabs .tab-color-4 { background:#b6a1d9; }
+body.student-mode .reference-tabs .tab-color-5 { background:#efa474; }
+body.student-mode .reference-tabs .category-tab[aria-pressed="true"] { background:#fff0b4; box-shadow:inset 0 4px 0 #fff; }
+body.student-mode .reference-tabs .category-tab:focus-visible { outline:none; box-shadow:inset 0 0 0 4px #172a32; }
+body.student-mode .reference-tabs .tab-turn { flex:0 0 44px; min-width:44px; height:60px; border:0; padding:4px; background:#e3dfd2; border-radius:4px; color:#283c38; }
+body.student-mode .reference-binder .book-navigation { background:#4d514e; color:#fff; }
+body.student-mode .reference-binder .book-navigation .card-pages { padding:0 8px 4px; }
+body.student-mode .reference-binder .book-navigation button { background:#f1e9d4; }
+body.student-mode .reference-binder .sentence-area { border:0; border-top:8px solid #4d514e; border-radius:0 0 10px 10px; background:#bd721b; padding:10px 12px; color:#fff9e9; }
+body.student-mode .reference-binder .strip-tool { border-radius:6px; background:#754410; border-color:#5b330d; }
+body.student-mode .reference-binder .undo-tool { background:#e9ac4d; color:#50300f; }
+body.student-mode .reference-binder .ending-placeholder { border:0; }
+body.student-mode .reference-binder .sentence-track::before { background-color:#e5d7b6; border-color:#c6b18b; box-shadow:inset 0 1px 3px #6b4c2d66,0 1px 1px #fff8; }
+body.student-mode .reference-binder .sentence-book { margin:8px 18px 10px; padding:0; background-image:linear-gradient(90deg,transparent calc(50% - 12px),#dddcd1 calc(50% - 12px),#dddcd1 calc(50% + 12px),transparent calc(50% + 12px)); background-size:25% 100%; background-repeat:repeat-x; }
+body.student-mode .reference-binder .sentence-book.rails-5 { background-size:20% 100%; }
+body.student-mode .practice-binder:not(.reference-binder) { border-color:#42466e; background:#565cbd; }
+body.student-mode .practice-binder:not(.reference-binder) .sentence-area { background:#bd721b; border-color:#754410; }
