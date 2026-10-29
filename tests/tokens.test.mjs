@@ -66,17 +66,14 @@ test('不正な個数・重複・未達成の完了を拒否し削除された�
   assert.throws(()=>tokenTransition({...selected,enabled:false},'add'));
 });
 
-test('表示方法の旧データ既定値と復元を保ち、表示変更で星を消さない', () => {
+test('小さい表示を選んだ旧データを専用画面へ引き継ぎ、楽しみと星を保持する', () => {
   const state = enabled();
-  const legacy = {...state.tokens}; delete legacy.display;
-  assert.equal(normalizeTokens(legacy,state.cards).display,'separate');
   state.tokens = tokenTransition(tokenTransition(state.tokens,'select','ball'),'add');
-  for (const display of ['compact','separate','compact']) {
-    state.tokens.display = display;
-    const restored = parseBackup(backupText(state));
-    assert.equal(restored.tokens.display,display);
-    assert.equal(restored.tokens.rewardId,'ball');
-    assert.equal(restored.tokens.earned,1);
-  }
-  assert.throws(()=>normalizeTokens({...state.tokens,display:'unknown'},state.cards));
+  state.tokens.display = 'compact';
+  const restored = parseBackup(backupText(state));
+  assert.equal(restored.tokens.rewardId,'ball');
+  assert.equal(restored.tokens.earned,1);
+  assert.equal(restored.tokens.enabled,true);
+  assert.ok(!('display' in restored.tokens));
+  assert.deepEqual(restored.cards,state.cards);
 });
