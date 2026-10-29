@@ -10,9 +10,11 @@ async function environment({ failingAsset = null } = {}) {
   const buckets = new Map([['other-app-cache', new Map()], ['ptp-v2-shell-old', new Map()]]);
   let online = true;
   let networkCalls = 0;
+  const cacheModes = [];
   const remote = async input => {
     const url = new URL(typeof input === 'string' ? input : input.url);
     networkCalls++;
+    cacheModes.push(input.cache);
     if (!online || url.pathname.endsWith(failingAsset || 'never')) throw new Error('network unavailable');
     const file = resolve(import.meta.dirname, '../dist', url.pathname.replace('/Picture-Talk-PECS-v2/', '') || 'index.html');
     await access(file);
@@ -25,17 +27,17 @@ async function environment({ failingAsset = null } = {}) {
       if (!buckets.has(key)) buckets.set(key, new Map());
       const entries = buckets.get(key);
       return {
-        addAll: async urls => { const values = await Promise.all(urls.map(remote)); values.forEach((value, index) => entries.set(urls[index], value)); },
+        addAll: async urls => { const values = await Promise.all(urls.map(remote)); values.forEach((value, index) => entries.set(typeof urls[index] === 'string' ? urls[index] : urls[index].url, value)); },
         match: async input => { const url = new URL(typeof input === 'string' ? input : input.url); url.search = ''; return entries.get(url.href); }
       };
     }
   };
   vm.runInNewContext(code, {
-    URL, caches, fetch: remote,
+    URL, Request, caches, fetch: remote,
     self: { location: 'https://school.example/Picture-Talk-PECS-v2/sw.js', clients: { claim: async () => {} }, addEventListener: (name, callback) => listeners.set(name, callback) }
   });
   return {
-    listeners, buckets,
+    listeners, buckets, cacheModes,
     offline: () => { online = false; },
     get networkCalls() { return networkCalls; },
     lifecycle: name => new Promise((resolve, reject) => listeners.get(name)({ waitUntil: promise => promise.then(resolve, reject) })),
@@ -86,4 +88,11 @@ test('準備済み表示は通信状態ではなく必須ファイルの実際�
   const current = [...env.buckets.entries()].find(([key]) => key.startsWith('ptp-v2-shell-'))[1];
   current.delete('https://school.example/Picture-Talk-PECS-v2/app.js');
   assert.equal((await env.check()).ready, false);
+});
+
+test('更新時にHTTPキャッシュの古いJSを再利用せず全ファイルを取り直す', async () => {
+  const env = await environment();
+  await env.lifecycle('install');
+  assert.ok(env.cacheModes.length > 0);
+  assert.ok(env.cacheModes.every(mode => mode === 'reload'));
 });
