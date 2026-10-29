@@ -34,7 +34,7 @@ test('ふだん使いで要求とコメントを切り替え、取消で元の�
 test('旧v5を練習モードとして移行し、以前のフェイズとカードを保持する',()=>{
  const s=initialState();s.schemaVersion=5;delete s.profile.mode;s.profile.phase=3;
  const clean=validateState(s);
- assert.equal(clean.schemaVersion,7);assert.equal(clean.profile.mode,'learning');assert.equal(clean.profile.phase,3);
+ assert.equal(clean.schemaVersion,8);assert.equal(clean.profile.mode,'learning');assert.equal(clean.profile.phase,3);
  assert.deepEqual(clean.cards,s.cards);
  s.profile.mode='external';assert.throws(()=>validateState(s));
 });

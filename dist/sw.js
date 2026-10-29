@@ -1,6 +1,6 @@
-const CACHE = 'ptp-v2-shell-0.12.0-reference-book';
+const CACHE = 'ptp-v2-shell-0.13.0-token-board';
 const ROOT = new URL('./', self.location).href;
-const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'cards.js', 'book.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
+const FILES = ['', 'index.html', 'style.css', 'app.js', 'domain.js', 'cards.js', 'book.js', 'tokens.js', 'sentence.js', 'speech.js', 'storage.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map(p => new URL(p, ROOT).href);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });

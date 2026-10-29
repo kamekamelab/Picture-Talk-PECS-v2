@@ -63,7 +63,7 @@ test('旧版v4の画像・配置・声・記録を保って6段階対応へ移�
   s.cards[0].layout={position:'bottom',textSize:'large'};
   s.settings.speech.onSelect=true;
   const clean=validateState(s);
-  assert.equal(clean.schemaVersion,7);
+  assert.equal(clean.schemaVersion,8);
   assert.equal(clean.profile.commentMode,'spontaneous');
   assert.deepEqual(clean.cards,s.cards);
   assert.deepEqual(clean.settings,s.settings);

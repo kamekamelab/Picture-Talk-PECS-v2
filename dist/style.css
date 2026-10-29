@@ -1164,3 +1164,18 @@ body.student-mode .reference-binder .sentence-book { margin:8px 18px 10px; paddi
 body.student-mode .reference-binder .sentence-book.rails-5 { background-size:20% 100%; }
 body.student-mode .practice-binder:not(.reference-binder) { border-color:#42466e; background:#565cbd; }
 body.student-mode .practice-binder:not(.reference-binder) .sentence-area { background:#bd721b; border-color:#754410; }
+
+/* Optional token board: separate from the communication cards. */
+body.student-mode .token-workspace { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(8px,2dvh,20px); padding:16px; background:#e9eedc; border:2px solid #9baa84; border-radius:16px; overflow:hidden; }
+.token-choice-settings { max-height:320px; overflow:auto; }
+.token-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); align-items:center; justify-items:center; gap:16px; width:100%; max-width:850px; height:100%; min-height:0; }
+body.student-mode .token-choices .word-card { width:clamp(90px,19dvw,220px); height:clamp(90px,25dvh,220px); min-height:0; max-width:100%; padding:8px; }
+.token-target { display:flex; align-items:center; justify-content:center; flex-direction:column; background:#fffefb; border:2px solid #87946e; border-radius:4px; width:clamp(130px,24dvh,230px); height:clamp(130px,24dvh,230px); padding:10px; }
+.token-slots { display:flex; justify-content:center; gap:clamp(8px,2vw,24px); width:100%; }
+.token-slot { display:grid; place-items:center; width:clamp(42px,10vw,96px); height:clamp(42px,10vw,96px); border:3px dashed #99a28a; border-radius:50%; background:#f7f7ec; color:#8c6117; font-size:clamp(28px,7vw,66px); }
+.token-slot.filled { border-style:solid; border-color:#b38b26; background:#f4d767; }
+.token-progress { font-size:18px; font-weight:650; color:#526344; }
+.token-support { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
+.token-support button,.token-done { min-height:48px; }
+.token-earned .token-target { width:clamp(150px,34dvh,330px); height:clamp(150px,34dvh,330px); }
+@media(max-height:600px) { body.student-mode .token-workspace { gap:6px; padding:8px; } .token-target { width:110px; height:110px; } .token-slot { width:50px; height:50px; font-size:32px; } .token-progress { font-size:14px; } }

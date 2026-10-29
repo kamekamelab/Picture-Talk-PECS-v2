@@ -1,3 +1,4 @@
+import { tokenStage, tokenTransition } from './tokens.js';
 import { moveBookCard, resizeBook, paginateBook } from './book.js';
 import { cardLayout, printPages } from './cards.js';
 import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
@@ -170,18 +171,18 @@ function header(student = false) {
   return `<header class="top"><a class="brand" href="#" data-action="${student ? 'teacher' : 'home'}"><img src="./icons/icon.svg" width="42" height="42" alt=""><span>Picture Talk<small>PECS v2${student ? '' : ' ・ 先生用'}</small></span></a><div class="header-actions">${fullscreenButton()}${student ? '<button class="quiet" data-action="teacher">設定</button>' : tag()}</div></header>`;
 }
 function nav() {
-  return `<nav class="nav" aria-label="先生用メニュー"><button data-action="start-daily">ふだん使いへ</button>${[['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
+  return `<nav class="nav" aria-label="先生用メニュー"><button data-action="start-daily">ふだん使いへ</button>${[['cards','カード'],['print','印刷'],['records','学習記録'],['backup','バックアップ'],['tokens','トークン'],['settings','設定']].map(([key,label]) => `<button class="${screen === key ? 'active' : ''}" data-screen="${key}" ${screen === key ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>`;
 }
 function render() {
   if (!state) return;
-  document.body.classList.toggle('student-mode', screen === 'student');
+  document.body.classList.toggle('student-mode', ['student','token'].includes(screen));
   if (screen === 'locked') {
     app.innerHTML = `<div class="shell">${header(true)}<main class="locked"><p class="eyebrow">先生用</p><h1>学習の準備をはじめましょう</h1><p class="muted">先生用PINで開いてください。</p><button class="primary" data-action="teacher">先生用画面を開く</button></main></div>`;
     syncFullscreenButton();
     return;
   }
-  const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${student ? studentControls() : header(false)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.12.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  const student = ['student','token'].includes(screen);
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${student ? studentControls() : header(false)}${student ? (screen === 'token' ? tokenView() : studentView()) : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView, tokens: tokenSettingsView })[screen]()}</main><footer>PTP · 開発版 0.13.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
   syncFullscreenButton();
 }
 function isDaily() { return state.profile.mode === 'daily'; }
@@ -262,7 +263,20 @@ function pageControls(page) {
   return page.pages > 1 ? `<div class="card-pages" role="group" aria-label="カードのページ"><button class="quiet" data-card-page="${page.page-1}" aria-label="前のカードページ" ${page.page === 0 ? 'disabled' : ''}>◀</button><span aria-live="polite">${page.page+1} / ${page.pages}</span><button class="quiet" data-card-page="${page.page+1}" aria-label="次のカードページ" ${page.page === page.pages-1 ? 'disabled' : ''}>▶</button></div>` : '';
 }
 function studentControls() {
-  return `<div class="student-controls">${fullscreenButton()}${isDaily() ? '<button class="quiet" data-action="edit-book" aria-label="配置を編集" title="配置を編集">✎</button>' : ''}<button class="quiet" data-action="teacher" aria-label="設定" title="設定">⚙</button></div>`;
+  return `<div class="student-controls">${fullscreenButton()}${screen === 'token' ? '<button class="quiet" data-action="token-book" aria-label="カードブックへ戻る" title="カードブックへ戻る">▦</button>' : `${state.tokens.enabled ? '<button class="quiet" data-action="token-open" aria-label="トークンボードを開く" title="トークンボードを開く">☆</button>' : ''}${isDaily() ? '<button class="quiet" data-action="edit-book" aria-label="配置を編集" title="配置を編集">✎</button>' : ''}`}<button class="quiet" data-action="teacher" aria-label="設定" title="設定">⚙</button></div>`;
+}
+function tokenSettingsView() {
+  const board = state.tokens;
+  return `<section class="intro"><div><h1>トークンボード</h1><p class="muted">選んだ楽しみと、そこまでに集める星を表示します。</p></div></section><section class="panel"><form id="token-form"><label class="check"><input type="checkbox" name="enabled" ${board.enabled ? 'checked' : ''}>トークンボードを使う</label><label>集める数<select name="total">${[1,2,3,4,5].map(n=>`<option value="${n}" ${board.total === n ? 'selected' : ''}>${n}個</option>`).join('')}</select></label><fieldset class="token-choice-settings"><legend>楽しみの候補（1〜6枚）</legend>${state.cards.map(c=>`<label class="check"><input type="checkbox" name="tokenChoices" value="${c.id}" ${board.choiceIds.includes(c.id) ? 'checked' : ''}>${esc(c.label)}</label>`).join('')}</fieldset><p class="hint">個数や候補を変更して保存すると、今の進み具合は最初に戻ります。同じ写真・文字をカードブックと共用します。</p><button class="primary" type="submit">トークンの設定を保存</button></form></section><section class="info-note"><p>星は支援者が手動で追加します。カードの読み上げやフェーズの記録では自動で増えません。星を集めている途中でもカードブックへ戻って伝えられます。</p><p>設定と進み具合はこの端末内に保存され、バックアップにも含まれます。現在：${board.earned} / ${board.total}個</p><button class="secondary" data-action="token-open" ${board.enabled ? '' : 'disabled'}>トークンボードを開く</button></section>`;
+}
+function tokenView() {
+  const board = state.tokens;
+  const stage = tokenStage(board);
+  const card = state.cards.find(c=>c.id === board.rewardId);
+  if (!board.enabled) return '<main class="student token-workspace"><p>先生用設定からトークンボードを有効にしてください。</p><button class="secondary" data-action="token-book">カードブックへ戻る</button></main>';
+  if (stage === 'choose') return `<main class="student token-workspace" aria-label="楽しみを選ぶ"><section class="token-choices" aria-label="楽しみの候補">${board.choiceIds.map(id=>state.cards.find(c=>c.id===id)).map(c=>`<button class="word-card" data-token-choice="${c.id}" aria-label="${esc(c.label)}を楽しみに選ぶ">${face(c,state.settings.showLabel)}</button>`).join('')}</section></main>`;
+  if (stage === 'reward') return `<main class="student token-workspace token-earned" aria-label="選んだ楽しみ"><div class="token-target">${face(card,state.settings.showLabel)}</div><button class="primary" data-token-action="reset">つぎをえらぶ</button></main>`;
+  return `<main class="student token-workspace" aria-label="トークンボード"><section class="token-target" aria-label="楽しみ：${esc(card.label)}">${face(card,state.settings.showLabel)}</section><div class="token-slots" role="img" aria-label="${board.total}個のうち${board.earned}個たまりました">${Array.from({length:board.total},(_,i)=>`<span class="token-slot ${i < board.earned ? 'filled' : ''}" aria-hidden="true">${i < board.earned ? '★' : ''}</span>`).join('')}</div><div class="token-progress" aria-live="polite">${board.earned} / ${board.total}</div>${stage === 'ready' ? '<button class="primary token-done" data-token-action="redeem">できた</button>' : ''}<div class="token-support" role="group" aria-label="支援者の操作"><button class="quiet" data-token-action="undo" aria-label="トークンを1つ戻す" ${board.earned ? '' : 'disabled'}>↶</button><button class="primary" data-token-action="add" ${stage === 'collecting' ? '' : 'disabled'}>＋ 星をわたす</button><button class="quiet" data-action="token-reset">えらびなおす</button></div></main>`;
 }
 function predicateToggle() {
   return `<button class="predicate-toggle" data-action="toggle-predicate" aria-pressed="${predicateOpen}" aria-label="つたえることばのページ${predicateOpen ? 'を閉じる' : 'を開く'}"><span>つたえることば</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v11H11l-5 5v-5H5z"/><path d="M8 8h8M8 11h6"/></svg></button>`;
@@ -427,6 +441,10 @@ document.addEventListener('click', event => {
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
   if (button.dataset.action === 'offline-retry') { prepareOffline(); return; }
   if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }
+  if (button.dataset.tokenChoice || button.dataset.tokenAction) {
+    const action = button.dataset.tokenChoice ? 'select' : button.dataset.tokenAction;
+    return run(async () => { const next = structuredClone(state); next.tokens = tokenTransition(next.tokens, action, button.dataset.tokenChoice); await persist(next); if (dialog.open) closeDialog(); render(); if (action === 'select') saySelection(state.cards.find(c=>c.id === state.tokens.rewardId).label); });
+  }
   if (button.dataset.categoryPage !== undefined) { categoryPage = Number(button.dataset.categoryPage); render(); return; }
   if (button.dataset.action === 'toggle-predicate') { predicateOpen = !predicateOpen; render(); return; }
   if (button.dataset.cardPage !== undefined) { cardPage = Number(button.dataset.cardPage); render(); return; }
@@ -487,6 +505,9 @@ document.addEventListener('click', event => {
   if (action === 'print') { run(async () => { await Promise.all([...document.querySelectorAll('.print-preview img')].map(img => img.decode())); window.print(); }); return; }
   if (action === 'stop-speech') return;
   if (action === 'close-dialog') return closeDialog();
+  if (action === 'token-open') { if (!state.tokens.enabled) return toast('先生用のトークン設定を有効にしてください。'); pendingReading = null; reader.stop(); screen = 'token'; bookEditing = false; unlocked = false; render(); return; }
+  if (action === 'token-book') { screen = 'student'; render(); return; }
+  if (action === 'token-reset') { modal('楽しみを選び直す', '<p>今の星を0個に戻して、楽しみを選び直します。</p><button class="primary" data-token-action="reset">選び直す</button>'); return; }
   if (action === 'teacher') { bookEditing = false; pickedCard = null; return teacherGate(); }
   if (action === 'edit-book' || action === 'finish-book-edit') { bookEditing = action === 'edit-book'; pickedCard = null; render(); return; }
   if (action === 'home') { screen = 'settings'; render(); return; }
@@ -544,7 +565,14 @@ document.addEventListener('submit', event => {
   const fields = new FormData(form);
   run(async () => {
     const next = structuredClone(state);
-    if (form.id === 'learning-form') {
+    if (form.id === 'token-form') {
+      const total = Number(fields.get('total')), choiceIds = fields.getAll('tokenChoices'), enabled = fields.has('enabled');
+      if (enabled && (choiceIds.length < 1 || choiceIds.length > 6)) throw new Error('楽しみの候補を1〜6枚選んでください。');
+      if (choiceIds.length > 6) throw new Error('楽しみの候補は6枚までです。');
+      const changed = total !== state.tokens.total || JSON.stringify(choiceIds) !== JSON.stringify(state.tokens.choiceIds);
+      next.tokens = { ...state.tokens, enabled, total, choiceIds, ...(changed ? { rewardId:null, earned:0, redeemed:false } : {}) };
+      await persist(next); render(); toast('トークンの設定を保存しました。');
+    } else if (form.id === 'learning-form') {
       next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds'), commentMode: fields.get('commentMode'), mode: 'learning' };
       await persist(next); unlocked = false; screen = 'student'; cardPage = 0; predicateOpen = false; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
     } else if (form.id === 'card-form') {
