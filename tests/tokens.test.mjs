@@ -65,3 +65,18 @@ test('不正な個数・重複・未達成の完了を拒否し削除された�
   assert.ok(!clean.choiceIds.includes('ball'));
   assert.throws(()=>tokenTransition({...selected,enabled:false},'add'));
 });
+
+test('表示方法の旧データ既定値と復元を保ち、表示変更で星を消さない', () => {
+  const state = enabled();
+  const legacy = {...state.tokens}; delete legacy.display;
+  assert.equal(normalizeTokens(legacy,state.cards).display,'separate');
+  state.tokens = tokenTransition(tokenTransition(state.tokens,'select','ball'),'add');
+  for (const display of ['compact','separate','compact']) {
+    state.tokens.display = display;
+    const restored = parseBackup(backupText(state));
+    assert.equal(restored.tokens.display,display);
+    assert.equal(restored.tokens.rewardId,'ball');
+    assert.equal(restored.tokens.earned,1);
+  }
+  assert.throws(()=>normalizeTokens({...state.tokens,display:'unknown'},state.cards));
+});

@@ -1179,3 +1179,17 @@ body.student-mode .token-choices .word-card { width:clamp(90px,19dvw,220px); hei
 .token-support button,.token-done { min-height:48px; }
 .token-earned .token-target { width:clamp(150px,34dvh,330px); height:clamp(150px,34dvh,330px); }
 @media(max-height:600px) { body.student-mode .token-workspace { gap:6px; padding:8px; } .token-target { width:110px; height:110px; } .token-slot { width:50px; height:50px; font-size:32px; } .token-progress { font-size:14px; } }
+
+/* Optional shared progress in the book; no overlay on communication cards. */
+body.student-mode .with-compact-tokens { --workspace-card:clamp(60px,min(14vw,16dvh),130px); }
+.compact-tokens { display:flex; align-items:center; justify-content:center; flex:0 0 56px; min-height:56px; gap:8px; padding:4px 8px; background:#e9eedc; color:#35452d; border-top:2px solid #9baa84; }
+.compact-tokens button { min-width:44px; min-height:44px; padding:4px 8px; border:1px solid #87946e; border-radius:6px; background:#fffefb; color:#35452d; }
+.compact-tokens .compact-token-open { display:flex; flex-direction:column; align-items:center; justify-content:center; width:44px; height:44px; padding:2px; overflow:hidden; }
+.compact-token-open .card-picture { width:100%; height:100%; min-height:0; }
+.compact-token-open img { width:100%; height:100%; object-fit:contain; }
+.compact-token-stars { display:flex; gap:3px; font-size:clamp(20px,3.5vw,30px); white-space:nowrap; }
+.compact-token-stars .filled { color:#89630d; }
+.compact-token-count { font-size:14px; white-space:nowrap; }
+.compact-token-message { font-size:16px; }
+@media(max-height:600px) { body.student-mode .with-compact-tokens { --workspace-card:clamp(44px,min(12vw,12dvh),90px); } }
+.compact-token-open .card-emoji { font-size:28px; line-height:1; }
