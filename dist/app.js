@@ -8,6 +8,7 @@ import { createReader, localJapaneseVoice, localJapaneseVoices } from './speech.
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
 const notice = document.querySelector('#notice');
+const fullscreenExit = document.querySelector('#fullscreen-exit');
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const now = () => new Date().toISOString();
 const uid = () => crypto.randomUUID();
@@ -126,29 +127,36 @@ window.addEventListener('offline', syncOfflineStatus);
 let fullscreenPending = false;
 function fullscreenActive() { return Boolean(document.fullscreenElement || document.webkitFullscreenElement); }
 function fullscreenButton() {
-  return `<button class="quiet fullscreen-toggle" data-action="fullscreen" aria-pressed="${fullscreenActive()}" ${fullscreenPending ? 'disabled' : ''}>${fullscreenActive() ? '全画面を終了' : '全画面'}</button>`;
+  return `<button class="quiet fullscreen-toggle" data-action="fullscreen" aria-label="全画面表示にする" title="全画面表示にする" ${fullscreenPending ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg></button>`;
 }
 function syncFullscreenButton() {
+  const active = fullscreenActive();
+  document.body.classList.toggle('fullscreen', active);
+  // Keep the escape control usable when a modal makes the rest of the page inert.
+  const host = dialog.open ? dialog : document.body;
+  if (fullscreenExit.parentElement !== host) host.append(fullscreenExit);
+  fullscreenExit.hidden = !active;
+  fullscreenExit.disabled = fullscreenPending;
   const button = app.querySelector('[data-action="fullscreen"]');
-  if (!button) return;
-  button.textContent = fullscreenActive() ? '全画面を終了' : '全画面';
-  button.setAttribute('aria-pressed', String(fullscreenActive()));
-  button.disabled = fullscreenPending;
+  if (button) button.disabled = fullscreenPending;
 }
+dialog.addEventListener('close', syncFullscreenButton);
 function fullscreenHelp(failed = false) {
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   modal('全画面表示', `<p>${standalone ? 'ホーム画面から開いているため、すでにブラウザーのアドレスバーがない表示です。' : failed ? 'この環境では全画面に切り替えられませんでした。' : 'このブラウザーは全画面への切り替えに対応していません。'}</p><p>iPadではSafariの共有メニューから「ホーム画面に追加」し、追加したアイコンから開くと、アドレスバーなしで使えます。</p><p class="hint">カードや文はそのままです。</p>`);
 }
-async function toggleFullscreen() {
+async function toggleFullscreen(exitOnly = false) {
   if (fullscreenPending) return;
   const root = document.documentElement;
   const active = fullscreenActive();
+  if (exitOnly && !active) return;
   const method = active ? (document.exitFullscreen || document.webkitExitFullscreen) : (root.requestFullscreen || root.webkitRequestFullscreen);
   if (!method || (!active && (root.requestFullscreen ? document.fullscreenEnabled === false : document.webkitFullscreenEnabled === false))) { fullscreenHelp(); return; }
   fullscreenPending = true; syncFullscreenButton();
   try {
     // Request directly from the tap so Safari retains user activation.
-    await method.call(active ? document : root);
+    if (!active && root.requestFullscreen) await method.call(root, { navigationUI: 'hide' });
+    else await method.call(active ? document : root);
   } catch { fullscreenHelp(true); }
   finally { fullscreenPending = false; syncFullscreenButton(); }
 }
@@ -165,10 +173,12 @@ function render() {
   if (!state) return;
   if (screen === 'locked') {
     app.innerHTML = `<div class="shell">${header(true)}<main class="locked"><p class="eyebrow">先生用</p><h1>学習の準備をはじめましょう</h1><p class="muted">先生用PINで開いてください。</p><button class="primary" data-action="teacher">先生用画面を開く</button></main></div>`;
+    syncFullscreenButton();
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? `${studentView()}<div class="student-offline">${tag()}</div>` : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.2 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? `${studentView()}<div class="student-offline">${tag()}</div>` : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.3 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  syncFullscreenButton();
 }
 function isDaily() { return state.profile.mode === 'daily'; }
 function usesSentence() { return isDaily() || state.profile.phase >= 4; }
@@ -259,7 +269,7 @@ function dailyView() {
   const book = state.settings.book;
   const rails = book.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
   const endings = [{ label: REQUEST, emoji: '🤲' }, ...Object.values(COMMENTS)];
-  return `<main class="student daily-student"><p class="eyebrow">いつもの カードブック</p><h1>カードで つたえよう</h1><div class="book-edit-toolbar">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : `<span>マジックテープ ${book.rails}本</span><button class="secondary" data-action="edit-book">配置を編集</button>`}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="category-tabs" aria-label="カードのカテゴリ"><button data-category="" aria-pressed="${dailyCategory === null}">ぜんぶ</button>${categories.map(c => `<button data-category="${esc(c)}" aria-pressed="${dailyCategory === c}">${esc(c)}</button>`).join('')}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${bookEditing ? '<p>カードの配置を編集中です。</p>' : sentenceBoard(true)}</section></div></main>`;
+  return `<main class="student daily-student"><p class="eyebrow">いつもの カードブック</p><h1>カードで つたえよう</h1><div class="book-edit-toolbar ${bookEditing ? 'is-editing' : ''}">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : `<span>マジックテープ ${book.rails}本</span><button class="secondary" data-action="edit-book">配置を編集</button>`}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="category-tabs" aria-label="カードのカテゴリ"><button data-category="" aria-pressed="${dailyCategory === null}">ぜんぶ</button>${categories.map(c => `<button data-category="${esc(c)}" aria-pressed="${dailyCategory === c}">${esc(c)}</button>`).join('')}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${bookEditing ? '<p>カードの配置を編集中です。</p>' : sentenceBoard(true)}</section></div></main>`;
 }
 function sizeCardImage(radius) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 200;
@@ -300,6 +310,7 @@ async function run(task) {
 function modal(title, content) {
   dialog.innerHTML = `<div class="modal-head"><h2 id="dialog-title">${title}</h2><button class="quiet" data-action="close-dialog" aria-label="閉じる">×</button></div>${content}`;
   if (!dialog.open) dialog.showModal();
+  syncFullscreenButton();
 }
 function closeDialog() { if (imageBusy) return toast('画像の準備を待ってください。'); dialog.close(); pendingRestore = null; editorToken++; }
 function cardEditor(id = null) {
@@ -375,7 +386,9 @@ function recordDialog() {
 
 document.addEventListener('click', event => {
   const button = event.target.closest('button, a[data-action]');
-  if (!button || busy) return;
+  if (!button) return;
+  if (button.dataset.action === 'fullscreen-exit') { toggleFullscreen(true); return; }
+  if (busy) return;
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
   if (button.dataset.action === 'offline-retry') { prepareOffline(); return; }
   if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }

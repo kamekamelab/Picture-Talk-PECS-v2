@@ -1051,3 +1051,24 @@ html:-webkit-full-screen { overflow:auto; background:#f6f7f2; }
 
 .student-offline { display:flex; justify-content:flex-end; margin-top:16px; }
 @media print { .student-offline { display:none; } }
+
+/* Fruit Harvest style: hide the header and keep one floating exit control. */
+.fullscreen-toggle,.fullscreen-exit { display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; padding:10px; }
+.fullscreen-toggle svg,.fullscreen-exit svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.fullscreen-exit { position:fixed; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); z-index:1100; background:#fffef8; border:1px solid #b6c5b8; box-shadow:0 2px 8px #0002; }
+.fullscreen-exit[hidden] { display:none; }
+body.fullscreen .top,body.fullscreen footer,body.fullscreen .student-offline { display:none; }
+body.fullscreen .shell { max-width:none; min-height:100dvh; padding:64px max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+body.fullscreen .student { padding:0; }
+body.fullscreen .student > .eyebrow,body.fullscreen .student > h1,body.fullscreen .book-edit-toolbar:not(.is-editing) { display:none; }
+body.fullscreen .daily-binder { display:flex; flex-direction:column; height:calc(100dvh - 86px); min-height:590px; padding:14px; }
+body.fullscreen .daily-book { flex:1 1 auto; min-height:150px; }
+body.fullscreen .daily-rail { min-height:100%; }
+body.fullscreen .category-tabs { flex-shrink:0; }
+body.fullscreen .daily-endings { flex-shrink:0; padding:10px 4px; }
+body.fullscreen .daily-endings .word-card { flex-basis:100px; height:100px; min-height:100px; padding:6px; }
+body.fullscreen .daily-endings .card-emoji { font-size:38px; }
+body.fullscreen .daily-endings .word-card strong { font-size:15px; }
+body.fullscreen .daily-student .sentence-area { flex-shrink:0; }
+body.fullscreen dialog { margin-top:72px; max-height:calc(100dvh - 96px); }
+@media print { .fullscreen-exit { display:none!important; } }
