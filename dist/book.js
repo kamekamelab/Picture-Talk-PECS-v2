@@ -29,3 +29,11 @@ export function moveBookCard(book, id, rail, before = null) {
   columns[rail].splice(index < 0 ? columns[rail].length : index, 0, id);
   return {rails:book.rails,columns};
 }
+
+// Page every rail together so empty rails and card positions stay stable.
+export function paginateBook(columns, index = 0, rows = 2) {
+  if (!Number.isInteger(rows) || rows < 1) throw new Error('ページの枚数が正しくありません。');
+  const pages = Math.max(1, ...columns.map(column => Math.ceil(column.length / rows)));
+  const page = Math.max(0, Math.min(pages - 1, Number.isInteger(index) ? index : 0));
+  return { page, pages, columns: columns.map(column => column.slice(page * rows, (page + 1) * rows)) };
+}

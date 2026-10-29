@@ -1,4 +1,4 @@
-import { moveBookCard, resizeBook } from './book.js';
+import { moveBookCard, resizeBook, paginateBook } from './book.js';
 import { cardLayout, printPages } from './cards.js';
 import { newTrial, transition, backupText, parseBackup, csv, readingRecord, MAX_BACKUP_BYTES } from './domain.js';
 import { openStorage, writeState } from './storage.js';
@@ -32,6 +32,7 @@ let pendingReading = null;
 let printSelection = null;
 let printSize = 35;
 let dailyCategory = null;
+let cardPage = 0;
 let bookEditing = false;
 let pickedCard = null;
 let pointerDrag = null;
@@ -171,13 +172,14 @@ function nav() {
 }
 function render() {
   if (!state) return;
+  document.body.classList.toggle('student-mode', screen === 'student');
   if (screen === 'locked') {
     app.innerHTML = `<div class="shell">${header(true)}<main class="locked"><p class="eyebrow">先生用</p><h1>学習の準備をはじめましょう</h1><p class="muted">先生用PINで開いてください。</p><button class="primary" data-action="teacher">先生用画面を開く</button></main></div>`;
     syncFullscreenButton();
     return;
   }
   const student = screen === 'student';
-  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${header(student)}${student ? `${studentView()}<div class="student-offline">${tag()}</div>` : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.10.3 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
+  app.innerHTML = `<div class="shell ${student ? 'student-shell' : ''}">${student ? studentControls() : header(false)}${student ? studentView() : `${nav()}<main id="main">${({ cards: cardsView, print: printView, records: recordsView, backup: backupView, settings: settingsView })[screen]()}</main><footer>PTP · 開発版 0.11.0 <span>写真と学習記録は、この端末内に保存します。</span></footer>`}</div>`;
   syncFullscreenButton();
 }
 function isDaily() { return state.profile.mode === 'daily'; }
@@ -246,30 +248,37 @@ function sentenceStrip(editable = false) {
   const endingLabel = endingWord(trial);
   const endingEmoji = Object.values(COMMENTS).find(c => c.label === endingLabel)?.emoji || '🤲';
   const endingContent = `<span class="card-emoji" aria-hidden="true">${endingEmoji}</span><strong>${endingLabel === 'をもっています' ? 'をもって<br>います' : esc(endingLabel)}</strong>`;
-  const ending = trial.ending ? `<div class="sentence-unit ending">${editable ? `<button class="word-card" data-sentence-action="ending" data-motion-key="ending:request" aria-label="${esc(endingLabel)}をブックにもどす">${endingContent}</button>` : `<div class="word-card">${endingContent}</div>`}</div>` : (editable ? `<div class="ending-placeholder">${isDaily() || state.profile.phase === 6 ? 'つたえることば' : REQUEST}</div>` : '');
-  return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}${!items && !trial.ending ? '<p class="hint">カードを ならべよう</p>' : ''}</div></div>`;
+  const ending = trial.ending ? `<div class="sentence-unit ending">${editable ? `<button class="word-card" data-sentence-action="ending" data-motion-key="ending:request" aria-label="${esc(endingLabel)}をブックにもどす">${endingContent}</button>` : `<div class="word-card">${endingContent}</div>`}</div>` : (editable ? `<div class="ending-placeholder"></div>` : '');
+  return `<div class="sentence-strip" role="group" aria-label="ぶんのならび" dir="ltr"><div class="sentence-track">${items}${ending}</div></div>`;
 }
 function sentenceBoard(editable = false) {
   const complete = trial.stage === 'selected';
   const canUndo = Boolean(trial.history?.length);
   return `<div class="sentence-board">${sentenceStrip(editable)}<div class="strip-tools" role="group" aria-label="ぶんのそうさ"><button class="strip-tool speak-tool" data-action="speak" aria-label="ぶんをよみあげる" aria-pressed="false" ${complete ? '' : 'disabled'}><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12h5l7-6v20l-7-6H5z"/><path d="M22 11q5 5 0 10M26 6q10 10 0 20"/></svg><span class="speech-label">よむ</span></button><button class="strip-tool undo-tool" data-sentence-action="undo" aria-label="ひとつもどす" ${canUndo ? '' : 'disabled'}><span class="undo-symbol" aria-hidden="true">↶</span><span>ひとつ<br>もどす</span></button></div></div>`;
 }
+function pageControls(page) {
+  return page.pages > 1 ? `<div class="card-pages" role="group" aria-label="カードのページ"><button class="quiet" data-card-page="${page.page-1}" aria-label="前のカードページ" ${page.page === 0 ? 'disabled' : ''}>◀</button><span aria-live="polite">${page.page+1} / ${page.pages}</span><button class="quiet" data-card-page="${page.page+1}" aria-label="次のカードページ" ${page.page === page.pages-1 ? 'disabled' : ''}>▶</button></div>` : '';
+}
+function studentControls() {
+  return `<div class="student-controls">${fullscreenButton()}${isDaily() ? '<button class="quiet" data-action="edit-book" aria-label="配置を編集" title="配置を編集">✎</button>' : ''}<button class="quiet" data-action="teacher" aria-label="設定" title="設定">⚙</button></div>`;
+}
 function sentenceView() {
   const phase = state.profile.phase;
-  const comment = phase === 6;
   const mode = state.profile.commentMode;
-  const question = phase === 5 ? 'なにが ほしいですか？' : comment && mode !== 'spontaneous' ? COMMENTS[mode].question : '';
-  const endings = comment ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([key, c]) => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('') : `<button class="word-card request-choice" data-sentence-action="ending" data-motion-key="ending:request" aria-pressed="${trial.ending}" ${trial.ending ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">🤲</span><strong>${REQUEST}</strong></button>`;
-  return `<main class="student sentence-student"><p class="eyebrow">${comment ? 'みつけたことを つたえよう' : 'ことばを ならべよう'}</p><h1>${comment ? 'つたえよう' : 'ぶんを つくろう'}</h1>${question ? `<p class="question-card">${question}</p>` : ''}<section class="sentence-book" aria-label="カードブック">${state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim())).map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}${endings}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${sentenceBoard(true)}</section></main>`;
+  const cards = state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim()));
+  const page = paginateBook([cards], cardPage, state.settings.book.rails * 2); cardPage = page.page;
+  const endings = phase === 6 ? Object.entries(COMMENTS).filter(([key]) => mode === 'spontaneous' || mode === key).map(([,c]) => ({...c})) : [{label:REQUEST,emoji:'🤲'}];
+  return `<main class="student sentence-student practice-binder" aria-label="練習のカードブック"><section class="sentence-book rails-${state.settings.book.rails}" aria-label="カードブック">${page.columns[0].map(c => `<button class="word-card" data-sentence-action="select" data-card-id="${c.id}" data-motion-key="item:${c.id}" aria-label="${esc(c.label)}を文に入れる" ${trial.cardIds.includes(c.id) || trial.cardIds.length >= 4 ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}</section><div class="book-navigation">${pageControls(page)}</div><section class="daily-endings" aria-label="つたえることば">${endings.map(c=>`<button class="word-card request-choice" data-sentence-action="${phase === 6 ? 'expression' : 'ending'}" data-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && endingWord(trial) === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ">${sentenceBoard(true)}</section></main>`;
 }
 function dailyView() {
   const categories = [...new Set(state.cards.map(c => c.category))];
   if (dailyCategory !== null && !categories.includes(dailyCategory)) dailyCategory = null;
   const cards = state.cards.filter(c => ![REQUEST, ...commentEndings].includes(c.label.trim()) && (dailyCategory === null || c.category === dailyCategory));
   const book = state.settings.book;
-  const rails = book.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
+  const page = paginateBook(book.columns.map(column => column.filter(id => cards.some(c => c.id === id))), cardPage); cardPage = page.page;
+  const rails = page.columns.map((column,index) => `<section class="daily-rail" data-rail="${index}" aria-label="${index+1}本目のマジックテープ">${column.map(id => cards.find(c => c.id === id)).filter(Boolean).map(c => `<button class="word-card drag-card ${pickedCard === c.id ? 'picked-card' : ''}" data-drag-card="${c.id}" ${bookEditing ? `data-pick-card="${c.id}" aria-pressed="${pickedCard === c.id}"` : `data-sentence-action="select" data-card-id="${c.id}"`} data-motion-key="item:${c.id}" aria-label="${esc(c.label)}${bookEditing ? 'を移動する' : 'を文に入れる'}" ${!bookEditing && (trial.cardIds.includes(c.id) || trial.cardIds.length >= 4) ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}${bookEditing ? `<button class="rail-place" data-place-rail="${index}" ${pickedCard ? '' : 'disabled'}>${index+1}本目に置く</button>` : ''}</section>`).join('');
   const endings = [{ label: REQUEST, emoji: '🤲' }, ...Object.values(COMMENTS)];
-  return `<main class="student daily-student"><p class="eyebrow">いつもの カードブック</p><h1>カードで つたえよう</h1><div class="book-edit-toolbar ${bookEditing ? 'is-editing' : ''}">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : `<span>マジックテープ ${book.rails}本</span><button class="secondary" data-action="edit-book">配置を編集</button>`}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="category-tabs" aria-label="カードのカテゴリ"><button data-category="" aria-pressed="${dailyCategory === null}">ぜんぶ</button>${categories.map(c => `<button data-category="${esc(c)}" aria-pressed="${dailyCategory === c}">${esc(c)}</button>`).join('')}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ"><h2>ぶん</h2>${bookEditing ? '<p>カードの配置を編集中です。</p>' : sentenceBoard(true)}</section></div></main>`;
+  return `<main class="student daily-student" aria-label="カードブック"><div class="book-edit-toolbar ${bookEditing ? 'is-editing' : ''}">${bookEditing ? `<label>縦のマジックテープ<select id="rail-count"><option value="4" ${book.rails === 4 ? 'selected' : ''}>4本</option><option value="5" ${book.rails === 5 ? 'selected' : ''}>5本</option></select></label><p>カードを左右のテープへドラッグ。カードの上なら、その前に入ります。タップで選んで「置く」でも動かせます。</p><button class="primary" data-action="finish-book-edit">編集をおわる</button>` : ``}</div><div class="daily-binder ${bookEditing ? 'book-editing' : ''}"><section class="daily-book rails-${book.rails}" aria-label="カードブック">${rails}</section><nav class="book-navigation" aria-label="カードのカテゴリとページ"><select id="daily-category" aria-label="カードのカテゴリ"><option value="">ぜんぶ</option>${categories.map(c => `<option value="${esc(c)}" ${dailyCategory === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>${pageControls(page)}</nav><section class="daily-endings" aria-label="つたえることば">${bookEditing ? '' : endings.map(c => `<button class="word-card request-choice" data-sentence-action="expression" data-expression="${c.label}" data-drag-expression="${c.label}" aria-label="${c.label}を文に入れる" ${trial.ending && trial.expression === c.label ? 'disabled' : ''}><span class="card-emoji" aria-hidden="true">${c.emoji}</span><strong>${c.label === 'をもっています' ? 'をもって<br>います' : c.label}</strong></button>`).join('')}</section><section class="sentence-area" aria-label="ぶんをつくるところ">${bookEditing ? '' : sentenceBoard(true)}</section></div></main>`;
 }
 function sizeCardImage(radius) {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 200;
@@ -283,13 +292,15 @@ function studentView() {
   if (state.profile.phase === 3) return discriminationView();
   const card = state.cards.find(c => c.id === (trial.cardId || state.profile.cardId));
   const selected = trial.stage === 'selected';
-  return `<main class="student"><p class="eyebrow">カードで つたえよう</p><h1>${selected ? 'よんで つたえよう' : state.profile.phase === 2 ? 'じぶんから つたえよう' : 'カードを えらぼう'}</h1><div class="exchange-layout"><section class="book-space" aria-label="カードブック"><span class="space-label">カード</span>${selected ? '<div class="card-placeholder" aria-hidden="true"></div>' : `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをえらぶ">${face(card, state.settings.showLabel)}</button>`}</section><span class="exchange-arrow" aria-hidden="true">→</span><section class="give-space" aria-label="えらんだカード"><span class="space-label">えらんだカード</span>${selected ? `<button class="student-card selected" data-action="reset" aria-label="${esc(card.label)}をブックにもどす">${face(card, state.settings.showLabel)}</button>` : '<div class="card-placeholder" aria-hidden="true"><span>＋</span></div>'}</section></div><button class="primary read-card-button" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span> <span class="speech-label">よむ</span></button></main>`;
+  return `<main class="student single-student practice-binder" aria-label="練習のカードブック"><section class="single-book" aria-label="カードブック">${selected ? '<div class="card-placeholder" aria-hidden="true"></div>' : `<button class="student-card" data-action="select" aria-label="${esc(card.label)}のカードをえらぶ">${face(card,state.settings.showLabel)}</button>`}</section><section class="sentence-area" aria-label="えらんだカード"><div class="sentence-board"><div class="sentence-strip"><div class="sentence-track">${selected ? `<button class="word-card" data-action="reset" aria-label="${esc(card.label)}をブックにもどす">${face(card,state.settings.showLabel)}</button>` : ''}</div></div><div class="strip-tools"><button class="strip-tool speak-tool" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span><span class="speech-label">よむ</span></button></div></div></section></main>`;
 }
 function discriminationView() {
   const selected = state.cards.find(c => c.id === trial.cardId);
   const choices = state.cards.filter(c => state.profile.choiceIds.includes(c.id));
-  return `<main class="student sentence-student"><p class="eyebrow">カードで つたえよう</p><h1>カードを えらぼう</h1><section class="sentence-book choice-book" aria-label="カードブック">${choices.map(c => `<button class="word-card" data-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}のカードをえらぶ" ${selected?.id === c.id ? 'disabled' : ''}>${face(c, state.settings.showLabel)}</button>`).join('')}</section><section class="sentence-area" aria-label="えらんだカード"><h2>えらんだカード</h2><div class="sentence-board"><div class="sentence-strip"><div class="sentence-track">${selected ? `<button class="word-card" data-action="reset" aria-label="${esc(selected.label)}をブックにもどす">${face(selected, state.settings.showLabel)}</button>` : '<p class="hint">カードを えらぼう</p>'}</div></div><div class="strip-tools"><button class="strip-tool speak-tool" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span><span class="speech-label">よむ</span></button></div></div></section></main>`;
+  const page = paginateBook([choices], cardPage, state.settings.book.rails * 2); cardPage = page.page;
+  return `<main class="student sentence-student practice-binder" aria-label="練習のカードブック"><section class="sentence-book rails-${state.settings.book.rails}" aria-label="カードブック">${page.columns[0].map(c => `<button class="word-card" data-action="select" data-card-id="${c.id}" aria-label="${esc(c.label)}のカードをえらぶ" ${selected?.id === c.id ? 'disabled' : ''}>${face(c,state.settings.showLabel)}</button>`).join('')}</section><div class="book-navigation">${pageControls(page)}</div><section class="sentence-area" aria-label="えらんだカード"><div class="sentence-board"><div class="sentence-strip"><div class="sentence-track">${selected ? `<button class="word-card" data-action="reset" aria-label="${esc(selected.label)}をブックにもどす">${face(selected,state.settings.showLabel)}</button>` : ''}</div></div><div class="strip-tools"><button class="strip-tool speak-tool" data-action="speak" data-speech-subject="カード" aria-label="カードをよみあげる" aria-pressed="false" ${selected ? '' : 'disabled'}><span aria-hidden="true">🔊</span><span class="speech-label">よむ</span></button></div></div></section></main>`;
 }
+
 function printView() {
   const selected = state.cards.filter(c => printSelection === null || printSelection.includes(c.id)).map(c => c.id);
   const pages = printPages(state.cards, selected, printSize);
@@ -392,6 +403,7 @@ document.addEventListener('click', event => {
   if (performance.now() < suppressClickUntil) { event.preventDefault(); return; }
   if (button.dataset.action === 'offline-retry') { prepareOffline(); return; }
   if (button.dataset.action === 'fullscreen') { toggleFullscreen(); return; }
+  if (button.dataset.cardPage !== undefined) { cardPage = Number(button.dataset.cardPage); render(); return; }
   if (button.dataset.pickCard) { pickedCard = button.dataset.pickCard; render(); return; }
   if (button.dataset.placeRail !== undefined) { saveCardPosition(pickedCard,Number(button.dataset.placeRail)); return; }
   if (button.dataset.action !== 'speak') { pendingReading = null; reader.stop(); }
@@ -407,7 +419,7 @@ document.addEventListener('click', event => {
     } catch (error) { toast(error.message); }
     return;
   }
-  if (button.dataset.category !== undefined) { dailyCategory = button.dataset.category || null; render(); return; }
+  if (button.dataset.category !== undefined) { dailyCategory = button.dataset.category || null; cardPage = 0; render(); return; }
   if (button.dataset.recordId) {
     pendingRecord = state.records.find(r => r.id === button.dataset.recordId);
     if (pendingRecord) recordDialog();
@@ -459,7 +471,7 @@ document.addEventListener('click', event => {
   run(async () => {
     if (action === 'start-daily') {
       const next = structuredClone(state); next.profile.mode = 'daily'; await persist(next);
-      bookEditing = false; pickedCard = null; dailyCategory = null; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
+      bookEditing = false; pickedCard = null; dailyCategory = null; cardPage = 0; trial = newSentenceTrial('', true); unlocked = false; screen = 'student'; render();
     } else if (action === 'add-size-cards') {
       const next = structuredClone(state);
       for (const [label, radius] of [['おおきい',72], ['ちいさい',28]]) {
@@ -506,7 +518,7 @@ document.addEventListener('submit', event => {
     const next = structuredClone(state);
     if (form.id === 'learning-form') {
       next.profile = { alias: String(fields.get('alias')).trim(), cardId: fields.get('cardId'), phase: Number(fields.get('phase')), choiceIds: fields.getAll('choiceIds'), commentMode: fields.get('commentMode'), mode: 'learning' };
-      await persist(next); unlocked = false; screen = 'student'; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
+      await persist(next); unlocked = false; screen = 'student'; cardPage = 0; trial = state.profile.phase >= 4 ? newSentenceTrial(state.profile.phase === 6 ? '' : undefined) : newTrial(); render();
     } else if (form.id === 'card-form') {
       const card = { id: editedId || uid(), label: String(fields.get('label')).trim(), category: String(fields.get('category')).trim(), emoji: String(fields.get('emoji')).trim(), image: draftImage, layout: { position: fields.get('position'), textSize: fields.get('textSize') } };
       if (editedId) next.cards[next.cards.findIndex(c=>c.id===editedId)] = card; else next.cards.push(card);
@@ -532,6 +544,7 @@ document.addEventListener('submit', event => {
 });
 document.addEventListener('change', async event => {
   const input = event.target;
+  if (input.id === 'daily-category') { dailyCategory = input.value || null; cardPage = 0; render(); return; }
   if (input.id === 'rail-count') { run(async () => { const next = structuredClone(state); next.settings.book = resizeBook(next.settings.book,Number(input.value)); await persist(next); render(); }); return; }
   if (input.id === 'print-size') { printSize = Number(input.value); render(); return; }
   if (input.dataset.printCard) { const selected = new Set(printSelection ?? state.cards.map(c => c.id)); if (input.checked) selected.add(input.dataset.printCard); else selected.delete(input.dataset.printCard); printSelection = [...selected]; render(); return; }

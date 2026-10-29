@@ -27,3 +27,20 @@ test('カード追加・削除を配置へ反映し、不正な列・重複を�
  assert.throws(()=>moveBookCard(clean.settings.book,'missing',0));
  assert.throws(()=>moveBookCard(clean.settings.book,'ball',8));
 });
+
+
+test('ページ切替で全カードに到達でき、空の列と元の順番を保持する', async () => {
+  const { paginateBook } = await import('../dist/book.js');
+  const columns = [['a','b','c','d','e'],[],['f'],['g','h','i']];
+  const seen = columns.map(()=>[]);
+  for(let index=0;index<3;index++) {
+    const result = paginateBook(columns,index);
+    assert.equal(result.pages,3);
+    assert.equal(result.columns.length,4);
+    result.columns.forEach((column,i)=>seen[i].push(...column));
+  }
+  assert.deepEqual(seen,columns);
+  assert.equal(paginateBook(columns,99).page,2);
+  assert.equal(paginateBook([[]],5).page,0);
+  assert.throws(()=>paginateBook(columns,0,0));
+});

@@ -1072,3 +1072,56 @@ body.fullscreen .daily-endings .word-card strong { font-size:15px; }
 body.fullscreen .daily-student .sentence-area { flex-shrink:0; }
 body.fullscreen dialog { margin-top:72px; max-height:calc(100dvh - 96px); }
 @media print { .fullscreen-exit { display:none!important; } }
+
+/* Student workspace: a fixed board, with pages instead of scrolling. */
+body.student-mode { overflow:hidden; height:100dvh; overscroll-behavior:none; }
+body.student-mode .student-shell { --workspace-card:clamp(68px,min(14vw,18dvh),140px); max-width:none; height:100dvh; min-height:0; padding:calc(52px + env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); overflow:hidden; }
+.student-controls { position:fixed; top:max(3px,env(safe-area-inset-top)); right:max(8px,env(safe-area-inset-right)); height:46px; display:flex; gap:4px; z-index:20; }
+.student-controls button { width:44px; height:44px; min-height:44px; padding:10px; font-size:21px; }
+body.fullscreen .student-controls { display:none; }
+body.student-mode .student { height:100%; min-height:0; padding:0; text-align:center; }
+body.student-mode .daily-student { display:flex; flex-direction:column; }
+body.student-mode .daily-binder,body.student-mode .practice-binder { flex:1; display:flex; flex-direction:column; gap:6px; min-height:0; height:100%; padding:10px; border:2px solid #cba923; border-radius:16px; background:#f1cd37; box-shadow:none; overflow:hidden; }
+body.student-mode .daily-book { flex:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); min-height:0; padding:4px; gap:8px; overflow:hidden; }
+body.student-mode .daily-book.rails-5 { grid-template-columns:repeat(5,minmax(0,1fr)); }
+body.student-mode .daily-rail { min-height:0; height:100%; gap:8px; padding:4px 0; overflow:hidden; }
+body.student-mode .daily-rail .word-card { width:var(--workspace-card); max-width:100%; height:var(--workspace-card); aspect-ratio:1; padding:5px; }
+body.student-mode .word-card .card-face.text-small strong { font-size:clamp(12px,1.6dvh,16px); }
+body.student-mode .word-card .card-face.text-medium strong { font-size:clamp(14px,2dvh,20px); }
+body.student-mode .word-card .card-face.text-large strong { font-size:clamp(16px,2.6dvh,26px); }
+body.student-mode .word-card .card-emoji { font-size:clamp(30px,6dvh,60px); }
+body.student-mode .book-edit-toolbar:not(.is-editing) { display:none; }
+body.student-mode .book-edit-toolbar.is-editing { flex-shrink:0; margin:0 0 4px; gap:8px; }
+body.student-mode .book-edit-toolbar p { display:none; }
+.book-navigation { display:flex; flex-shrink:0; align-items:center; justify-content:space-between; gap:8px; min-height:0; }
+.book-navigation select { width:auto; max-width:50%; margin:0; min-height:44px; padding:6px 10px; }
+.card-pages { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-left:auto; }
+.card-pages button { min-height:44px; padding:6px 12px; }
+.card-pages span { font-size:13px; white-space:nowrap; }
+body.student-mode .daily-endings { display:flex; flex-shrink:0; gap:8px; padding:0; overflow:hidden; }
+body.student-mode .daily-endings .word-card { flex:0 1 100px; width:100px; height:clamp(68px,11dvh,104px); min-height:0; padding:4px; gap:2px; }
+body.student-mode .daily-endings .word-card strong { font-size:clamp(12px,1.8dvh,17px); }
+body.student-mode .daily-endings .card-emoji { font-size:clamp(26px,4dvh,40px); }
+body.student-mode .sentence-area { flex-shrink:0; margin:0; padding:8px; min-height:0; border-radius:12px; background:#245a3a; border-color:#164329; color:#fff9df; }
+body.student-mode .sentence-board { grid-template-columns:minmax(0,1fr) 64px; gap:6px; align-items:center; }
+body.student-mode .sentence-strip { padding:3px; overflow:hidden; }
+body.student-mode .sentence-track { width:100%; min-width:0; min-height:clamp(80px,18dvh,150px); padding:0; gap:6px; align-items:center; }
+body.student-mode .sentence-track::before { top:66%; height:24px; }
+body.student-mode .sentence-unit,body.student-mode .sentence-track > .word-card,body.student-mode .ending-placeholder { flex:0 1 var(--workspace-card); min-width:0; width:var(--workspace-card); }
+body.student-mode .sentence-unit .word-card,body.student-mode .sentence-track > .word-card,body.student-mode .ending-placeholder { width:100%; height:clamp(76px,17dvh,142px); min-height:0; padding:5px; }
+body.student-mode .sentence-unit .word-card > strong { font-size:clamp(12px,2dvh,20px); }
+body.student-mode .sentence-unit .word-card > .card-emoji { font-size:clamp(28px,5dvh,48px); }
+body.student-mode .strip-tools { gap:6px; padding:0; }
+body.student-mode .strip-tool { width:64px; min-height:0; height:clamp(40px,8dvh,68px); padding:4px; font-size:11px; gap:2px; }
+body.student-mode .strip-tool svg { width:26px; height:26px; }
+body.student-mode .undo-tool .undo-symbol { font-size:22px; }
+body.student-mode .undo-tool span:last-child { display:none; }
+body.student-mode .sentence-book { flex:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; min-height:0; padding:8px; background:transparent; border:0; overflow:hidden; align-items:center; justify-items:center; }
+body.student-mode .sentence-book.rails-5 { grid-template-columns:repeat(5,minmax(0,1fr)); }
+body.student-mode .sentence-book .word-card { width:var(--workspace-card); max-width:100%; height:var(--workspace-card); min-height:0; padding:5px; }
+body.student-mode .single-book { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; background:linear-gradient(90deg,transparent calc(50% - 13px),#e8ddc2 calc(50% - 13px),#e8ddc2 calc(50% + 13px),transparent calc(50% + 13px)); }
+body.student-mode .single-book .student-card,body.student-mode .single-book .card-placeholder { width:clamp(120px,26dvh,240px); height:clamp(120px,26dvh,240px); min-height:0; }
+body.student-mode .single-book .card-emoji { font-size:clamp(44px,9dvh,88px); }
+body.student-mode .rail-place { min-height:32px; padding:3px; }
+body.student-mode .fullscreen-exit { top:max(3px,env(safe-area-inset-top)); width:44px; height:44px; min-height:44px; }
+@media print { body.student-mode { height:auto; overflow:visible; } }
